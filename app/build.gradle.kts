@@ -148,7 +148,7 @@ android {
             this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
 
             val variantName = name
-            val apkName = "lastchat_" + defaultConfig.versionName + "_" + variantName + ".apk"
+            val apkName = "lustchat_" + defaultConfig.versionName + "_" + variantName + ".apk"
 
             outputFileName = apkName
         }

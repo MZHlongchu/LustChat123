@@ -136,7 +136,7 @@ fun SettingAboutPage() {
                     subtitle = stringResource(R.string.setting_about_page_github_repo_subtitle),
                     trailing = Icons.AutoMirrored.Rounded.OpenInNew,
                     onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/54xzh/LastChat"))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/I-i-I-iIi-I-i-I/LustChat"))
                         context.startActivity(intent)
                     }
                 )

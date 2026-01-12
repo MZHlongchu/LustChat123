@@ -101,7 +101,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val lazyListState = rememberLazyListState()
-    
+
     Scaffold(
         topBar = {
             OneUITopAppBar(
@@ -301,17 +301,17 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         icon = { Icon(Icons.Rounded.Info, null, modifier = Modifier.size(20.dp)) },
                         onClick = { navController.navigate(Screen.SettingAbout) }
                     )
-                    
+                    /*
                     val context = LocalContext.current
                     SettingGroupItem(
                         title = "Buy Me a Coffee",
                         subtitle = "Support the development",
                         icon = { Icon(Icons.Rounded.Favorite, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error) },
-                        onClick = { 
+                        onClick = {
                             context.openUrl("https://buymeacoffee.com/cocolalilal")
                         }
                     )
-
+                    */
                     SettingGroupItem(
                         title = stringResource(R.string.developer_page_tab_request_logs),
                         subtitle = stringResource(R.string.setting_request_logs_desc),
@@ -380,7 +380,7 @@ fun SettingItem(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val haptics = rememberPremiumHaptics()
-    
+
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.97f else 1f,
         animationSpec = spring(dampingRatio = 0.5f, stiffness = 400f),
@@ -391,7 +391,7 @@ fun SettingItem(
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
         label = "setting_alpha"
     )
-    
+
     Surface(
         onClick = {
             haptics.perform(HapticPattern.Tick)
@@ -425,20 +425,20 @@ private fun UpdateAvailableBanner(
     navController: NavHostController
 ) {
     if (!checkForUpdates) return
-    
+
     val updateChecker = org.koin.compose.koinInject<me.rerere.rikkahub.utils.UpdateChecker>()
     // Remember the flow to prevent creating a new one on each recomposition
     val updateFlow = remember(updateChecker) { updateChecker.checkUpdate() }
     val updateState by updateFlow.collectAsStateWithLifecycle(initialValue = me.rerere.rikkahub.utils.UiState.Loading)
     var showUpdateDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    
+
     when (val state = updateState) {
         is me.rerere.rikkahub.utils.UiState.Success -> {
             val updateInfo = state.data
             val currentVersion = me.rerere.rikkahub.BuildConfig.VERSION_NAME
             val isNewer = me.rerere.rikkahub.utils.Version(updateInfo.version) > me.rerere.rikkahub.utils.Version(currentVersion)
-            
+
             if (isNewer && updateInfo.downloads.isNotEmpty()) {
                 Card(
                     onClick = { showUpdateDialog = true },
@@ -479,7 +479,7 @@ private fun UpdateAvailableBanner(
                         )
                     }
                 }
-                
+
                 if (showUpdateDialog) {
                     AlertDialog(
                         onDismissRequest = { showUpdateDialog = false },

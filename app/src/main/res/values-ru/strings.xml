@@ -7,7 +7,7 @@
   <string name="about_page_version">Версия</string>
   <string name="about_page_website">Веб-сайт</string>
   <string name="add">Добавить</string>
-  <string name="app_name">LastChat</string>
+  <string name="app_name">LustChat</string>
   <string name="assistant_importer_import_failed">Импорт не удался</string>
   <string name="assistant_importer_import_tavern_json">Импортировать карточку персонажа Tavern (JSON)</string>
   <string name="assistant_importer_import_tavern_png">Импортировать карту персонажа Tavern (PNG)</string>
@@ -471,7 +471,7 @@
   <string name="setting_page_search_title">Служба поиска</string>
   <string name="setting_page_share">Поделиться</string>
   <string name="setting_page_share_desc">Поделиться этим приложением с друзьями</string>
-  <string name="setting_page_share_text">LastChat — открытый Android-ассистент с ИИ\n\nСайт: https://rikka-ai.com/</string>
+  <string name="setting_page_share_text">LustChat — открытый Android-ассистент с ИИ\n\nСайт: https://rikka-ai.com/</string>
   <string name="setting_page_theme_setting">Настройки темы</string>
   <string name="setting_page_theme_type_high_contrast">Высокая контрастность</string>
   <string name="setting_page_theme_type_medium_contrast">Средний контраст</string>
@@ -1133,7 +1133,7 @@
     <string name="lorebook_export_success">Лорбук экспортирован успешно</string>
     <string name="lorebook_export_error">Не удалось экспортировать</string>
     <string name="lorebook_export_format">Формат экспорта</string>
-    <string name="export_format_lastchat">LastChat (Полный)</string>
+    <string name="export_format_lastchat">LustChat (Полный)</string>
     <string name="export_format_sillytavern">SillyTavern</string>
     <string name="export_format_tavern">Tavern (Совместимый)</string>
     <string name="select_all">Выбрать все</string>
@@ -1143,7 +1143,7 @@
     <string name="global_value_format">Глобальный (%s)</string>
     <string name="auto">Авто</string>
     <string name="local">Локальный</string>
-    <string name="text_selection_menu_label">Спросить LastChat</string>
+    <string name="text_selection_menu_label">Спросить LustChat</string>
     <string name="text_selection_translate">Перевести</string>
     <string name="text_selection_explain">Объяснить</string>
     <string name="text_selection_summarize">Сводка</string>
@@ -1176,8 +1176,8 @@
     <string name="text_selection_action_cannot_delete">Нельзя удалить это действие</string>
     <string name="reset">Сброс</string>
     <string name="text_selection_try_it">Попробовать</string>
-    <string name="text_selection_setup_instructions">Выделите текст в любом месте на устройстве, найдите "LastChat" на панели и нажмите для использования.</string>
-    <string name="text_selection_demo_text">Это пример текста! Попробуйте выделить эти слова долгим нажатием, затем найдите "LastChat". Возможно, придется нажать меню (⋮).</string>
+    <string name="text_selection_setup_instructions">Выделите текст в любом месте на устройстве, найдите "LustChat" на панели и нажмите для использования.</string>
+    <string name="text_selection_demo_text">Это пример текста! Попробуйте выделить эти слова долгим нажатием, затем найдите "LustChat". Возможно, придется нажать меню (⋮).</string>
     <string name="text_selection_demo_hint">👆 Долгое нажатие на текст выше для пробы</string>
     <string name="a11y_forward">Вперед</string>
     <string name="a11y_hide">Скрыть</string>
@@ -1230,7 +1230,7 @@
     <string name="translator_page_copy_translation">Копировать перевод</string>
     <string name="translator_page_paste_text">Вставить текст</string>
     <string name="update_download_notification_desc">Загрузка %1$s...</string>
-    <string name="update_download_notification_title">Обновление LastChat</string>
+    <string name="update_download_notification_title">Обновление LustChat</string>
     <string name="update_card_download_started">Загрузка началась, проверьте статус-бар</string>
     <string name="update_card_failed_to_check_updates">Не удалось проверить обновления</string>
     <string name="update_card_new_version_available">Доступна новая версия: %1$s</string>

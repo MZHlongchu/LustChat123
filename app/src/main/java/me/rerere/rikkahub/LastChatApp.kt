@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.dataSourceModule
+import me.rerere.rikkahub.di.getRemoteConfigOrNull
 import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -96,8 +97,8 @@ class LastChatApp : Application(), SingletonImageLoader.Factory {
         // delete temp files
         deleteTempFiles()
 
-        // Init remote config
-        get<FirebaseRemoteConfig>().apply {
+        // Init remote config (optional - may not be available if google-services.json is missing)
+        getRemoteConfigOrNull()?.apply {
             setConfigSettingsAsync(remoteConfigSettings {
                 minimumFetchIntervalInSeconds = 1800
             })

@@ -10,20 +10,21 @@ import okhttp3.Request
 import okhttp3.Response
 import kotlin.io.encoding.Base64
 
-class AIRequestInterceptor(private val remoteConfig: FirebaseRemoteConfig) : Interceptor {
+class AIRequestInterceptor(private val remoteConfig: FirebaseRemoteConfig?) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         var request = chain.request()
         val host = request.url.host
 
-        if (host == "api.siliconflow.cn") {
-            request = processSiliconCloudRequest(request)
+        // Only process if remoteConfig is available
+        if (remoteConfig != null && host == "api.siliconflow.cn") {
+            request = processSiliconCloudRequest(request, remoteConfig)
         }
 
         return chain.proceed(request)
     }
 
     // 处理硅基流动的请求
-    private fun processSiliconCloudRequest(request: Request): Request {
+    private fun processSiliconCloudRequest(request: Request, config: FirebaseRemoteConfig): Request {
         val authHeader = request.header("Authorization")
         val path = request.url.encodedPath
 
@@ -35,9 +36,9 @@ class AIRequestInterceptor(private val remoteConfig: FirebaseRemoteConfig) : Int
         ) {
             val bodyJson = request.readBodyAsJson()
             val model = bodyJson?.jsonObject["model"]?.jsonPrimitiveOrNull?.content
-            val freeModels = remoteConfig.getString("silicon_cloud_free_models").split(",")
+            val freeModels = config.getString("silicon_cloud_free_models").split(",")
             if (model.isNullOrEmpty() || model in freeModels) {
-                val apiKey = String(Base64.decode(remoteConfig.getString("silicon_cloud_api_key")))
+                val apiKey = String(Base64.decode(config.getString("silicon_cloud_api_key")))
                 return request.newBuilder()
                     .header("Authorization", "Bearer $apiKey")
                     .build()

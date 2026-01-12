@@ -18,3 +18,9 @@ buildlog.txt
 /helloagents
 /artifacts
 settings.local.json
+
+# App build outputs (flavors)
+app/plus/
+app/exp/
+app/zh/
+app/build/

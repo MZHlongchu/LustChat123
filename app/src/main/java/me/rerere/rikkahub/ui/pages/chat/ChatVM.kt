@@ -67,7 +67,7 @@ class ChatVM(
     private val conversationRepo: ConversationRepository,
     private val chatService: ChatService,
     val updateChecker: UpdateChecker,
-    private val analytics: FirebaseAnalytics,
+    private val analytics: FirebaseAnalytics?,
     private val appScope: me.rerere.rikkahub.AppScope
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
@@ -332,7 +332,7 @@ class ChatVM(
         groupChatSpeakerSeatIdsOverride: List<Uuid>? = null,
     ) {
         if (content.isEmptyInputMessage()) return
-        analytics.logEvent("ai_send_message", null)
+        analytics?.logEvent("ai_send_message", null)
 
         val assistant = settings.value.assistants.find { it.id == settings.value.assistantId }
         val processedContent = if (assistant != null) {
@@ -366,7 +366,7 @@ class ChatVM(
 
     fun handleMessageEdit(parts: List<UIMessagePart>, messageId: Uuid) {
         if (parts.isEmptyInputMessage()) return
-        analytics.logEvent("ai_edit_message", null)
+        analytics?.logEvent("ai_edit_message", null)
 
         val assistant = settings.value.assistants.find { it.id == settings.value.assistantId }
         val processedParts = if (assistant != null) {
@@ -571,7 +571,7 @@ class ChatVM(
         message: UIMessage,
         regenerateAssistantMsg: Boolean = true
     ) {
-        analytics.logEvent("ai_regenerate_at_message", null)
+        analytics?.logEvent("ai_regenerate_at_message", null)
         chatService.regenerateAtMessage(_conversationId, message, regenerateAssistantMsg)
     }
 

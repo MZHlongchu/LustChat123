@@ -31,7 +31,7 @@ val viewModelModule = module {
             conversationRepo = get(),
             chatService = get(),
             updateChecker = get(),
-            analytics = get(),
+            analytics = getOrNull(),
             appScope = get()
         )
     }

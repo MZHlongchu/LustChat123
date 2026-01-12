@@ -11,9 +11,20 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.google.services)
-    alias(libs.plugins.firebase.crashlytics)
     alias(libs.plugins.chaquopy)
+}
+
+// Check if Firebase should be enabled (google-services.json exists)
+val firebaseEnabled: Boolean = file("google-services.json").exists() ||
+    file("src/google-services.json").exists() ||
+    listOf("plus", "exp", "zh").any { flavor ->
+        file("src/$flavor/google-services.json").exists()
+    }
+
+// Conditionally apply Firebase plugins at configuration time
+if (firebaseEnabled) {
+    apply(plugin = "com.google.gms.google-services")
+    apply(plugin = "com.google.firebase.crashlytics")
 }
 
 android {
@@ -206,7 +217,7 @@ dependencies {
 //    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 //    implementation(libs.androidx.material3.adaptive.navigation3)
 
-    // Firebase
+    // Firebase (dependencies always included, but plugins/initialization are conditional)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.crashlytics)

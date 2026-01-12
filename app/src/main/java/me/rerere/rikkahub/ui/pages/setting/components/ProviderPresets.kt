@@ -302,6 +302,12 @@ val PROVIDER_PRESETS = listOf(
         type = ProviderSetting.OpenAI::class,
         baseUrl = "https://open.bigmodel.cn/api/paas/v4"
     ),
+    ProviderPreset(
+        name = "fal.ai",
+        description = "Generative media platform for developers",
+        type = ProviderSetting.OpenAI::class,
+        baseUrl = "https://fal.run/openrouter/router/openai/v1"
+    ),
 )
 
 /**

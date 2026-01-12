@@ -38,6 +38,19 @@ fun Request.Builder.configureReferHeaders(url: String): Request.Builder {
     }
 }
 
+/**
+ * Добавляет заголовок Authorization с правильным префиксом в зависимости от провайдера.
+ * Для fal.ai/fal.run используется "Key", для остальных - "Bearer".
+ */
+fun Request.Builder.addAuthorizationHeader(url: String, apiKey: String): Request.Builder {
+    val httpUrl = url.toHttpUrl()
+    val prefix = when {
+        httpUrl.host.contains("fal") -> "Key"
+        else -> "Bearer"
+    }
+    return addHeader("Authorization", "$prefix $apiKey")
+}
+
 fun ResponseBody.stringSafe(): String? {
     return when (this) {
         is RealResponseBody -> string()

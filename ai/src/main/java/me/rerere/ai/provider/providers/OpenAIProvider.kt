@@ -22,6 +22,7 @@ import me.rerere.ai.ui.ImageGenerationResult
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.addAuthorizationHeader
 import me.rerere.ai.util.configureClientWithProxy
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
@@ -240,7 +241,7 @@ class OpenAIProvider(
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/images/generations")
             .headers(params.customHeaders.toHeaders())
-            .addHeader("Authorization", "Bearer $key")
+            .addAuthorizationHeader(providerSetting.baseUrl, key)
             .addHeader("Content-Type", "application/json")
             .post(requestBody.toRequestBody("application/json".toMediaType()))
             .build()
@@ -285,7 +286,7 @@ class OpenAIProvider(
 
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/embeddings")
-            .addHeader("Authorization", "Bearer $key")
+            .addAuthorizationHeader(providerSetting.baseUrl, key)
             .addHeader("Content-Type", "application/json")
             .post(requestBody.toRequestBody("application/json".toMediaType()))
             .build()

@@ -760,6 +760,7 @@ private fun matchProviderPattern(providerName: String): String? {
         providerName == "mancer" -> "openrouter.svg"
         providerName == "lynn" -> "openrouter.svg"
         providerName == "pygmalionai" -> "openrouter.svg"
+        providerName == "fal" || providerName == "fal.ai" || providerName == "fal-ai" -> "fal-color.svg"
         
         // Fallback patterns using contains for partial matches
         providerName.contains("llama") -> "meta-color.svg"
@@ -862,6 +863,7 @@ private fun matchIconPattern(searchName: String): String? {
         PATTERN_GROQ.containsMatchIn(searchName) -> "groq.svg"
         PATTERN_TOKENPONY.containsMatchIn(searchName) -> "tokenpony.svg"
         PATTERN_LING.containsMatchIn(searchName) -> "ling.png"
+        PATTERN_FAL.containsMatchIn(searchName) -> "fal-color.svg"
         // Search providers
         PATTERN_SEARCH_LINKUP.containsMatchIn(searchName) -> "linkup.png"
         PATTERN_SEARCH_BING.containsMatchIn(searchName) -> "bing.png"
@@ -918,6 +920,7 @@ private val PATTERN_VERCEL = Regex("vercel")
 private val PATTERN_GROQ = Regex("groq")
 private val PATTERN_TOKENPONY = Regex("tokenpony|小马算力")
 private val PATTERN_LING = Regex("ling|ring|百灵")
+private val PATTERN_FAL = Regex("fal\\.ai|fal-ai|\\bfal\\b")
 
 private val PATTERN_SEARCH_LINKUP = Regex("linkup")
 private val PATTERN_SEARCH_BING = Regex("bing")

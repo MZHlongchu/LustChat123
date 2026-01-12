@@ -136,7 +136,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.layout.layout
 import java.util.Locale
- 
+
 private enum class EmptyChatOverlay {
     None,
     Welcome,
@@ -651,6 +651,24 @@ private fun ChatPageContent(
                         val backup = conversation
                         val deletedNodeIds = conversation.messageNodes.map { it.id }.toSet()
                         vm.deleteMessage(it)
+                        val newNodeIds = vm.conversation.value.messageNodes.map { it.id }.toSet()
+                        val removedIds = deletedNodeIds - newNodeIds
+                        toaster.show(
+                            message = context.getString(R.string.message_deleted),
+                            action = me.rerere.rikkahub.ui.components.ui.ToastAction(
+                                label = context.getString(R.string.undo),
+                                onClick = {
+                                    vm.updateConversation(backup)
+                                    // Track restored node IDs for fade animation
+                                    vm.markNodesAsRestored(removedIds)
+                                }
+                            )
+                        )
+                    },
+                    onDeleteNode = {
+                        val backup = conversation
+                        val deletedNodeIds = conversation.messageNodes.map { it.id }.toSet()
+                        vm.deleteMessageNode(it)
                         val newNodeIds = vm.conversation.value.messageNodes.map { it.id }.toSet()
                         val removedIds = deletedNodeIds - newNodeIds
                         toaster.show(
@@ -1487,7 +1505,7 @@ private fun TopBar(
     val titleState = useEditState<String> {
         onUpdateTitle(it)
     }
-    
+
     // State for assistant picker - must be at function level for proper recomposition
     var showAssistantPicker by remember { mutableStateOf(false) }
     val groupChatTemplateForConversation = remember(settings.groupChatTemplates, conversation.assistantId) {
@@ -1511,7 +1529,7 @@ private fun TopBar(
         },
         title = {
             val editTitleWarning = stringResource(R.string.chat_page_edit_title_warning)
-            
+
             // Crossfade between normal title and "Temporary Chat"
             androidx.compose.animation.AnimatedContent(
                 targetState = isTemporaryChat,
@@ -1555,7 +1573,7 @@ private fun TopBar(
         actions = {
             // Check if chat is "empty" (no user-sent messages, ignoring preset messages)
             val isEmpty = !conversation.messageNodes.any { it.role == me.rerere.ai.core.MessageRole.USER }
-            
+
             // Fluid transition between assistant icon and search/new icons
             androidx.compose.animation.AnimatedContent(
                 targetState = isEmpty to isTemporaryChat,
@@ -1678,7 +1696,7 @@ private fun TopBar(
             }
         },
     )
-    
+
     // Assistant picker sheet - outside TopAppBar for proper state handling
     if (showAssistantPicker) {
         val chatTargetState = me.rerere.rikkahub.ui.hooks.rememberChatTargetState(settings, onUpdateSettings)

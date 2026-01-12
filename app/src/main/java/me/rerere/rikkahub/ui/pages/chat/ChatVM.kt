@@ -139,13 +139,13 @@ class ChatVM(
             null -> false
         }
     }.stateIn(viewModelScope, SharingStarted.Lazily, false)
-    
+
     // 获取当前助手的searchMode
     val currentSearchMode = settings.map { settings ->
         val assistant = settings.assistants.find { it.id == settings.assistantId }
         assistant?.searchMode ?: me.rerere.rikkahub.data.model.AssistantSearchMode.Off
     }.stateIn(viewModelScope, SharingStarted.Lazily, me.rerere.rikkahub.data.model.AssistantSearchMode.Off)
-    
+
     // 更新当前助手的searchMode
     fun updateAssistantSearchMode(searchMode: me.rerere.rikkahub.data.model.AssistantSearchMode) {
         viewModelScope.launch {
@@ -510,6 +510,47 @@ class ChatVM(
         saveConversationAsync()
     }
 
+    fun deleteMessageNode(node: me.rerere.rikkahub.data.model.MessageNode) {
+        val conversation = conversation.value
+        val nodeIndex = conversation.messageNodes.indexOf(node)
+        if (nodeIndex == -1) return
+
+        // Собираем все связанные узлы (tool calls/results)
+        val relatedNodeIndices = mutableSetOf(nodeIndex)
+
+        // Проверяем узлы до текущего
+        for (i in nodeIndex - 1 downTo 0) {
+            val prevNode = conversation.messageNodes[i]
+            if (prevNode.currentMessage.hasPart<UIMessagePart.ToolCall>() ||
+                prevNode.currentMessage.hasPart<UIMessagePart.ToolResult>()) {
+                relatedNodeIndices.add(i)
+            } else {
+                break
+            }
+        }
+
+        // Проверяем узлы после текущего
+        for (i in nodeIndex + 1 until conversation.messageNodes.size) {
+            val nextNode = conversation.messageNodes[i]
+            if (nextNode.currentMessage.hasPart<UIMessagePart.ToolCall>() ||
+                nextNode.currentMessage.hasPart<UIMessagePart.ToolResult>()) {
+                relatedNodeIndices.add(i)
+            } else {
+                break
+            }
+        }
+
+        val newConversation = conversation.copy(
+            messageNodes = conversation.messageNodes.filterIndexed { index, _ ->
+                index !in relatedNodeIndices
+            }
+        )
+
+        viewModelScope.launch {
+            chatService.saveConversation(_conversationId, newConversation)
+        }
+    }
+
     private fun deleteMessageInternal(message: UIMessage) {
         val conversation = conversation.value
         // Use ID-based lookup instead of object equality to avoid issues after recomposition
@@ -617,7 +658,7 @@ class ChatVM(
         viewModelScope.launch {
             // Mark conversation as not consolidated so it will be picked up by the worker
             conversationRepo.markAsNotConsolidated(conversation.id)
-            
+
             // Trigger a consolidation run with specific conversation ID
             val request = androidx.work.OneTimeWorkRequestBuilder<me.rerere.rikkahub.service.MemoryConsolidationWorker>()
                 .setInputData(

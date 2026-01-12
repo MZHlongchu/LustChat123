@@ -5,6 +5,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -16,6 +18,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -66,6 +70,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalScrollCaptureInProgress
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -74,6 +80,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceAtLeast
 import androidx.compose.material.icons.Icons
@@ -120,6 +127,12 @@ private const val TAG = "ChatList"
 private const val LoadingIndicatorKey = "LoadingIndicator"
 private const val ScrollBottomKey = "ScrollBottomKey"
 
+// Swipe to delete constants
+private const val FLING_VELOCITY_THRESHOLD = 1500f
+private const val MIN_HORIZONTAL_DISTANCE = 80f
+private const val ANGLE_RATIO = 2.5f
+private const val TOUCH_SLOP_FACTOR = 10f
+
 private data class MessageSpeakerIdentity(
     val seatId: Uuid?,
     val assistantId: Uuid?,
@@ -149,6 +162,7 @@ fun ChatList(
     onEdit: (UIMessage) -> Unit = {},
     onForkMessage: (UIMessage) -> Unit = {},
     onDelete: (UIMessage) -> Unit = {},
+    onDeleteNode: (MessageNode) -> Unit = {},
     onUpdateMessage: (MessageNode) -> Unit = {},
     onJumpToMessage: (Uuid) -> Unit = {},
 ) {
@@ -166,6 +180,7 @@ fun ChatList(
                     conversation = conversation,
                     settings = settings,
                     onJumpToMessage = onJumpToMessage,
+                    onDeleteNode = onDeleteNode,
                     animatedVisibilityScope = this@AnimatedContent,
                     initialSearchQuery = initialSearchQuery,
                 )
@@ -608,6 +623,7 @@ private fun SharedTransitionScope.ChatListPreview(
     settings: Settings,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onJumpToMessage: (Uuid) -> Unit,
+    onDeleteNode: (MessageNode) -> Unit = {},
     initialSearchQuery: String? = null,
 ) {
     var searchQuery by remember { mutableStateOf(initialSearchQuery ?: "") }
@@ -679,48 +695,163 @@ private fun SharedTransitionScope.ChatListPreview(
             ) { _, node ->
                 val message = node.currentMessage
                 val isUser = message.role == me.rerere.ai.core.MessageRole.USER
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                        .then(
-                            if (!isUser) Modifier.padding(end = 24.dp) else Modifier
-                        ),
-                    horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
-                ) {
-                    Surface(
-                        shape = MaterialTheme.shapes.medium,
-                        color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .clickable {
-                                    haptics.perform(HapticPattern.Pop)
-                                    keyboardController?.hide()
-                                    onJumpToMessage(node.id)
+                SwipeableMessagePreviewItem(
+                    message = message,
+                    node = node,
+                    isUser = isUser,
+                    searchQuery = searchQuery,
+                    onJumpToMessage = { onJumpToMessage(node.id) },
+                    onDelete = { onDeleteNode(node) },
+                    modifier = Modifier.animateItem()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwipeableMessagePreviewItem(
+    message: UIMessage,
+    node: MessageNode,
+    isUser: Boolean,
+    searchQuery: String,
+    onJumpToMessage: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+    val offsetX = remember { Animatable(0f) }
+    val onDeleteUpdated by rememberUpdatedState(onDelete)
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val haptics = rememberPremiumHaptics()
+
+    Box(
+        modifier = modifier
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val velocityTracker = VelocityTracker()
+                    velocityTracker.resetTracking()
+
+                    var totalDragX = 0f
+                    var totalDragY = 0f
+                    var isHorizontalDrag: Boolean? = null // null = еще не определено
+
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull() ?: break
+
+                            if (!change.pressed) {
+                                // Палец отпущен
+                                if (isHorizontalDrag == true) {
+                                    val velocity = velocityTracker.calculateVelocity().x
+                                    val absX = kotlin.math.abs(totalDragX)
+                                    val hasFlingVelocity = kotlin.math.abs(velocity) > FLING_VELOCITY_THRESHOLD
+                                    val hasMinDistance = absX > MIN_HORIZONTAL_DISTANCE
+
+                                    if (hasFlingVelocity && hasMinDistance) {
+                                        onDeleteUpdated()
+                                    } else {
+                                        scope.launch {
+                                            offsetX.animateTo(0f, tween(200))
+                                        }
+                                    }
                                 }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val highlightColor = MaterialTheme.colorScheme.tertiaryContainer
-                            val highlightedText = remember(searchQuery, message) {
-                                val fullText = message.toContentText().ifBlank { "[...]" }
-                                val messageText = extractMatchingSnippet(
-                                    text = fullText,
-                                    query = searchQuery
-                                )
-                                buildHighlightedText(
-                                    text = messageText,
-                                    query = searchQuery,
-                                    highlightColor = highlightColor
-                                )
+                                break
                             }
-                            Text(
-                                text = highlightedText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+
+                            val dragAmount = change.position - change.previousPosition
+                            totalDragX += dragAmount.x
+                            totalDragY += dragAmount.y
+
+                            // Определяем направление жеста после небольшого движения
+                            if (isHorizontalDrag == null) {
+                                val absX = kotlin.math.abs(totalDragX)
+                                val absY = kotlin.math.abs(totalDragY)
+
+                                if (absX > TOUCH_SLOP_FACTOR || absY > TOUCH_SLOP_FACTOR) {
+                                    // Определяем: горизонтальный или вертикальный
+                                    isHorizontalDrag = absX > absY * ANGLE_RATIO
+
+                                    if (isHorizontalDrag == false) {
+                                        // Вертикальное движение - не перехватываем, позволяем скроллу работать
+                                        break
+                                    }
+                                }
+                            }
+
+                            // Если уже определили как горизонтальный свайп - двигаем элемент
+                            if (isHorizontalDrag == true) {
+                                change.consume()
+                                velocityTracker.addPosition(change.uptimeMillis, change.position)
+                                scope.launch {
+                                    offsetX.snapTo(offsetX.value + dragAmount.x)
+                                }
+                            }
                         }
+                    } catch (e: Exception) {
+                        // Жест отменен
+                        if (isHorizontalDrag == true) {
+                            scope.launch {
+                                offsetX.animateTo(0f, tween(200))
+                            }
+                        }
+                    }
+                }
+            }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(offsetX.value.toInt(), 0) }
+                .then(
+                    if (!isUser) Modifier.padding(end = 24.dp) else Modifier
+                ),
+            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clickable {
+                            haptics.perform(HapticPattern.Pop)
+                            keyboardController?.hide()
+                            onJumpToMessage()
+                        }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val highlightColor = MaterialTheme.colorScheme.tertiaryContainer
+                    val highlightedText = remember(searchQuery, message) {
+                        val fullText = message.toContentText().ifBlank { "[...]" }
+                        val messageText = extractMatchingSnippet(
+                            text = fullText,
+                            query = searchQuery
+                        )
+                        buildHighlightedText(
+                            text = messageText,
+                            query = searchQuery,
+                            highlightColor = highlightColor
+                        )
+                    }
+                    Text(
+                        text = highlightedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    // Показываем индикатор количества сообщений в узле
+                    if (node.messages.size > 1) {
+                        Text(
+                            text = "${node.selectIndex + 1}/${node.messages.size}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
                     }
                 }
             }

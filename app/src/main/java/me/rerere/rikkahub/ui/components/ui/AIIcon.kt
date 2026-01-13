@@ -774,8 +774,8 @@ private fun matchProviderPattern(providerName: String): String? {
 private fun matchModelPattern(modelName: String): String? {
     return when {
         // Specific model patterns - order matters (more specific first)
+        // Специфичные бренды проверяются первыми (до OpenAI, т.к. "gpt" может встретиться в URL/названиях)
         PATTERN_CLAUDE_MODEL.containsMatchIn(modelName) -> "claude-color.svg"
-        PATTERN_GPT_MODEL.containsMatchIn(modelName) -> "openai.svg"
         PATTERN_GEMINI_MODEL.containsMatchIn(modelName) -> "gemini-color.svg"
         PATTERN_GEMMA.containsMatchIn(modelName) -> "gemma-color.svg"
         PATTERN_DEEPSEEK_MODEL.containsMatchIn(modelName) -> "deepseek-color.svg"
@@ -800,7 +800,9 @@ private fun matchModelPattern(modelName: String): String? {
         PATTERN_MYTHOMAX.containsMatchIn(modelName) -> "openrouter.svg"
         PATTERN_SONAR.containsMatchIn(modelName) -> "perplexity-color.svg"
         PATTERN_JAMBA.containsMatchIn(modelName) -> "openrouter.svg"
-        // Search service patterns
+        // OpenAI проверяется последним среди AI-провайдеров, т.к. паттерн "gpt" слишком широкий
+        PATTERN_GPT_MODEL.containsMatchIn(modelName) -> "openai.svg"
+        // Search service patterns (поисковые провайдеры)
         PATTERN_SEARCH_BING.containsMatchIn(modelName) -> "bing.png"
         PATTERN_SEARCH_TAVILY.containsMatchIn(modelName) -> "tavily.png"
         PATTERN_SEARCH_EXA.containsMatchIn(modelName) -> "exa.png"
@@ -824,7 +826,7 @@ private fun matchModelPattern(modelName: String): String? {
 // Also provide legacy matching for non-OpenRouter usage (backwards compat)
 private fun matchIconPattern(searchName: String): String? {
     return when {
-        PATTERN_OPENAI.containsMatchIn(searchName) -> "openai.svg"
+        // Специфичные бренды проверяются первыми (до OpenAI, т.к. "gpt" может встретиться в URL/названиях)
         PATTERN_GEMINI.containsMatchIn(searchName) -> "gemini-color.svg"
         PATTERN_GOOGLE.containsMatchIn(searchName) -> "google-color.svg"
         PATTERN_CLAUDE.containsMatchIn(searchName) -> "claude-color.svg"
@@ -864,7 +866,9 @@ private fun matchIconPattern(searchName: String): String? {
         PATTERN_TOKENPONY.containsMatchIn(searchName) -> "tokenpony.svg"
         PATTERN_LING.containsMatchIn(searchName) -> "ling.png"
         PATTERN_FAL.containsMatchIn(searchName) -> "fal-color.svg"
-        // Search providers
+        // OpenAI проверяется последним среди AI-провайдеров, т.к. паттерн "gpt" слишком широкий
+        PATTERN_OPENAI.containsMatchIn(searchName) -> "openai.svg"
+        // Search providers (поисковые провайдеры)
         PATTERN_SEARCH_LINKUP.containsMatchIn(searchName) -> "linkup.png"
         PATTERN_SEARCH_BING.containsMatchIn(searchName) -> "bing.png"
         PATTERN_SEARCH_TAVILY.containsMatchIn(searchName) -> "tavily.png"

@@ -43,6 +43,7 @@ import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
+import me.rerere.common.http.jsonPrimitiveOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -260,7 +261,6 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
     ): JsonObject {
         return buildJsonObject {
             put("model", params.model.modelId)
-            put("messages", buildMessages(messages))
             put("max_tokens", params.maxTokens ?: 64_000)
 
             if (params.temperature != null && (params.thinkingBudget ?: 0) == 0) put(
@@ -271,14 +271,40 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
 
             put("stream", stream)
 
-            // system prompt
+            // 处理工具 with cache_control on last tool
+            if (params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()) {
+                putJsonArray("tools") {
+                    params.tools.forEachIndexed { index, tool ->
+                        add(buildJsonObject {
+                            put("name", tool.name)
+                            put("description", tool.description)
+                            put("input_schema", json.encodeToJsonElement(tool.parameters()))
+                            // Add cache_control to the last tool
+                            if (index == params.tools.lastIndex) {
+                                put("cache_control", buildJsonObject {
+                                    put("type", "ephemeral")
+                                })
+                            }
+                        })
+                    }
+                }
+            }
+
+            // system prompt with cache_control on last block
             val systemMessage = messages.firstOrNull { it.role == MessageRole.SYSTEM }
             if (systemMessage != null) {
+                val textParts = systemMessage.parts.filterIsInstance<UIMessagePart.Text>()
                 put("system", buildJsonArray {
-                    systemMessage.parts.filterIsInstance<UIMessagePart.Text>().forEach { part ->
+                    textParts.forEachIndexed { index, part ->
                         add(buildJsonObject {
                             put("type", "text")
                             put("text", part.text)
+                            // Add cache_control to the last text block
+                            if (index == textParts.lastIndex) {
+                                put("cache_control", buildJsonObject {
+                                    put("type", "ephemeral")
+                                })
+                            }
                         })
                     }
                 })
@@ -297,25 +323,14 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 })
             }
 
-            // 处理工具
-            if (params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()) {
-                putJsonArray("tools") {
-                    params.tools.forEach { tool ->
-                        add(buildJsonObject {
-                            put("name", tool.name)
-                            put("description", tool.description)
-                            put("input_schema", json.encodeToJsonElement(tool.parameters()))
-                        })
-                    }
-                }
-            }
+            put("messages", buildMessages(messages))
         }.mergeCustomBody(params.customBody)
     }
 
     private fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
-        messages
+        val filteredMessages = messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
-            .forEach { message ->
+        filteredMessages.forEachIndexed { messageIndex, message ->
                 if (message.role == MessageRole.TOOL) {
                     message.getToolResults().forEach { result ->
                         add(buildJsonObject {
@@ -329,21 +344,31 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                             }
                         })
                     }
-                    return@forEach
+                    return@forEachIndexed
                 }
 
                 add(buildJsonObject {
                     // role
                     put("role", JsonPrimitive(message.role.name.lowercase()))
 
+                    // Determine if this is the last user message for cache_control
+                    val isLastUserMessage = message.role == MessageRole.USER &&
+                        messageIndex == filteredMessages.indexOfLast { it.role == MessageRole.USER }
+
                     // content
                     putJsonArray("content") {
-                        message.parts.forEach { part ->
+                        message.parts.forEachIndexed { partIndex, part ->
                             when (part) {
                                 is UIMessagePart.Text -> {
                                     add(buildJsonObject {
                                         put("type", "text")
                                         put("text", part.text)
+                                        // Add cache_control to the last part of the last user message
+                                        if (isLastUserMessage && partIndex == message.parts.lastIndex) {
+                                            put("cache_control", buildJsonObject {
+                                                put("type", "ephemeral")
+                                            })
+                                        }
                                     })
                                 }
 
@@ -362,6 +387,12 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                                                     base64Data.substringAfter(",")
                                                 ) // 移除 data:image/jpeg;base64, 前缀
                                             })
+                                            // Add cache_control to the last part of the last user message
+                                            if (isLastUserMessage && partIndex == message.parts.lastIndex) {
+                                                put("cache_control", buildJsonObject {
+                                                    put("type", "ephemeral")
+                                                })
+                                            }
                                         }.onFailure {
                                             it.printStackTrace()
                                             Log.w(TAG, "encode image failed: ${part.url}")
@@ -470,11 +501,22 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
 
     private fun parseTokenUsage(jsonObject: JsonObject?): TokenUsage? {
         if (jsonObject == null) return null
+        // Claude API returns:
+        // - input_tokens: tokens AFTER the last cache breakpoint (not cached)
+        // - cache_read_input_tokens: tokens read from cache
+        // - cache_creation_input_tokens: tokens written to cache
+        // Total input = cache_read + cache_creation + input_tokens
+        val inputTokens = jsonObject["input_tokens"]?.jsonPrimitive?.intOrNull ?: 0
+        val cacheReadTokens = jsonObject["cache_read_input_tokens"]?.jsonPrimitiveOrNull?.intOrNull ?: 0
+        val cacheCreationTokens = jsonObject["cache_creation_input_tokens"]?.jsonPrimitiveOrNull?.intOrNull ?: 0
+        val outputTokens = jsonObject["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0
+        // Calculate total prompt tokens including cached content
+        val totalPromptTokens = cacheReadTokens + cacheCreationTokens + inputTokens
         return TokenUsage(
-            promptTokens = jsonObject["input_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
-            completionTokens = jsonObject["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
-            totalTokens = (jsonObject["input_tokens"]?.jsonPrimitive?.intOrNull ?: 0) +
-                (jsonObject["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0)
+            promptTokens = totalPromptTokens,
+            completionTokens = outputTokens,
+            totalTokens = totalPromptTokens + outputTokens,
+            cachedTokens = cacheReadTokens,
         )
     }
 }

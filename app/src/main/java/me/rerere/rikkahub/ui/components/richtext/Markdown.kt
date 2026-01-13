@@ -46,6 +46,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.Placeholder
@@ -57,6 +58,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextGeometricTransform
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
@@ -399,6 +401,52 @@ object HeaderStyle {
 }
 
 @Composable
+private fun italicSpanStyle(
+    fontFamily: FontFamily? = null,
+    fontWeight: FontWeight = FontWeight.Normal
+): SpanStyle {
+    val resolver = LocalFontFamilyResolver.current
+    // Resolve both italic and non-italic typefaces to compare
+    val (italicFace, normalFace) = remember(resolver, fontFamily, fontWeight) {
+        val italic = resolver.resolve(
+            fontFamily = fontFamily,
+            fontWeight = fontWeight,
+            fontStyle = FontStyle.Italic
+        ).value as? android.graphics.Typeface
+        val normal = resolver.resolve(
+            fontFamily = fontFamily,
+            fontWeight = fontWeight,
+            fontStyle = FontStyle.Normal
+        ).value as? android.graphics.Typeface
+        italic to normal
+    }
+    
+    // Check if font has real italic support by comparing typefaces
+    // If they're the same (or italic is heavier), font doesn't have real italic
+    val hasRealItalic = remember(italicFace, normalFace) {
+        if (italicFace == null || normalFace == null) false
+        else {
+            // Real italic fonts have different typeface instances
+            // and italic weight should not be heavier than normal
+            italicFace != normalFace &&
+            (italicFace.weight <= normalFace.weight + 50) // Allow small tolerance
+        }
+    }
+    
+    return remember(hasRealItalic) {
+        if (hasRealItalic) {
+            SpanStyle(fontStyle = FontStyle.Italic)
+        } else {
+            // No real italic - use geometric transform (skew) instead
+            // Don't set fontStyle to avoid Android's synthetic bold substitution
+            SpanStyle(
+                textGeometricTransform = TextGeometricTransform(skewX = -0.25f)
+            )
+        }
+    }
+}
+
+@Composable
 private fun MarkdownNode(
     node: ASTNode,
     content: String,
@@ -504,8 +552,11 @@ private fun MarkdownNode(
         MarkdownElementTypes.BLOCK_QUOTE -> {
             // Get RP color for blockquotes
             val rpColor = getRpColor(">")
-            val textStyle = LocalTextStyle.current.copy(
-                fontStyle = FontStyle.Italic,
+            val italicStyle = italicSpanStyle(
+                fontFamily = LocalTextStyle.current.fontFamily,
+                fontWeight = LocalTextStyle.current.fontWeight ?: FontWeight.Normal
+            )
+            val textStyle = LocalTextStyle.current.merge(italicStyle).copy(
                 color = rpColor ?: Color.Unspecified
             )
             ProvideTextStyle(textStyle) {
@@ -552,7 +603,11 @@ private fun MarkdownNode(
 
         // 加粗和斜体
         MarkdownElementTypes.EMPH -> {
-            ProvideTextStyle(TextStyle(fontStyle = FontStyle.Italic)) {
+            val italicStyle = italicSpanStyle(
+                fontFamily = LocalTextStyle.current.fontFamily,
+                fontWeight = LocalTextStyle.current.fontWeight ?: FontWeight.Normal
+            )
+            ProvideTextStyle(TextStyle().merge(italicStyle)) {
                 node.children.fastForEach { child ->
                     MarkdownNode(
                         node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
@@ -855,6 +910,10 @@ private fun Paragraph(
     val textStyle = LocalTextStyle.current
     val density = LocalDensity.current
     val rpStyleRules = LocalSettings.current.displaySetting.rpStyleRules
+    val italicStyle = italicSpanStyle(
+        fontFamily = textStyle.fontFamily,
+        fontWeight = textStyle.fontWeight ?: FontWeight.Normal
+    )
     FlowRow(
         modifier = modifier.then(
             if (node.nextSibling() != null) Modifier.padding(bottom = 4.dp)
@@ -871,6 +930,7 @@ private fun Paragraph(
                         colorScheme = colorScheme,
                         onClickCitation = onClickCitation,
                         style = textStyle,
+                        italicStyle = italicStyle,
                         density = density,
                         trim = trim,
                         rpStyleRules = rpStyleRules,
@@ -951,6 +1011,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
     colorScheme: ColorScheme,
     density: Density,
     style: TextStyle,
+    italicStyle: SpanStyle,
     onClickCitation: (String) -> Unit = {},
     rpStyleRules: List<RpStyleRule> = emptyList(),
 ) {
@@ -960,7 +1021,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
         node.type == GFMTokenTypes.GFM_AUTOLINK -> {
             val link = node.getTextInNode(content)
             withLink(LinkAnnotation.Url(link)) {
-                withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                withStyle(italicStyle) {
                     append(link)
                 }
             }
@@ -982,7 +1043,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             // Check for RP color rule for pattern "*" (single emphasis)
             val emphRule = rpStyleRules.find { it.pattern == "*" && it.enabled }
             val emphColor = emphRule?.let { runCatching { Color(android.graphics.Color.parseColor(it.colorHex)) }.getOrNull() }
-            withStyle(SpanStyle(fontStyle = FontStyle.Italic, color = emphColor ?: Color.Unspecified)) {
+            withStyle(italicStyle.copy(color = emphColor ?: Color.Unspecified)) {
                 node.children.trim(MarkdownTokenTypes.EMPH, 1).fastForEach {
                     appendMarkdownNodeContent(
                         node = it,
@@ -991,6 +1052,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                         colorScheme = colorScheme,
                         density = density,
                         style = style,
+                        italicStyle = italicStyle,
                         onClickCitation = onClickCitation,
                         rpStyleRules = rpStyleRules
                     )
@@ -1011,6 +1073,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                         colorScheme = colorScheme,
                         density = density,
                         style = style,
+                        italicStyle = italicStyle,
                         onClickCitation = onClickCitation,
                         rpStyleRules = rpStyleRules
                     )
@@ -1031,6 +1094,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                         colorScheme = colorScheme,
                         density = density,
                         style = style,
+                        italicStyle = italicStyle,
                         onClickCitation = onClickCitation,
                         rpStyleRules = rpStyleRules
                     )
@@ -1097,7 +1161,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             val links = node.children.trim(MarkdownTokenTypes.LT, 1).trim(MarkdownTokenTypes.GT, 1)
             links.fastForEach { link ->
                 withLink(LinkAnnotation.Url(link.getTextInNode(content))) {
-                    withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                    withStyle(italicStyle) {
                         append(link.getTextInNode(content))
                     }
                 }
@@ -1146,13 +1210,14 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
         // 其他类型继续递归处理
         else -> {
             node.children.fastForEach {
-            appendMarkdownNodeContent(
+                appendMarkdownNodeContent(
                     node = it,
                     content = content,
                     inlineContents = inlineContents,
                     colorScheme = colorScheme,
                     density = density,
                     style = style,
+                    italicStyle = italicStyle,
                     onClickCitation = onClickCitation,
                     rpStyleRules = rpStyleRules
                 )

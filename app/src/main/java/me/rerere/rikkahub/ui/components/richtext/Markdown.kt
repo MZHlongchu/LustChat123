@@ -552,33 +552,24 @@ private fun MarkdownNode(
         MarkdownElementTypes.BLOCK_QUOTE -> {
             // Get RP color for blockquotes
             val rpColor = getRpColor(">")
-            val italicStyle = italicSpanStyle(
-                fontFamily = LocalTextStyle.current.fontFamily,
-                fontWeight = LocalTextStyle.current.fontWeight ?: FontWeight.Normal
-            )
-            val textStyle = LocalTextStyle.current.merge(italicStyle).copy(
-                color = rpColor ?: Color.Unspecified
-            )
-            ProvideTextStyle(textStyle) {
-                val borderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                val bgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
-                Column(
-                    modifier = Modifier
-                        .drawWithContent {
-                            drawContent()
-                            drawRect(
-                                color = bgColor, size = size
-                            )
-                            drawRect(
-                                color = borderColor, size = Size(10f, size.height)
-                            )
-                        }
-                        .padding(8.dp)) {
-                    node.children.fastForEach { child ->
-                        MarkdownNode(
-                            node = child, content = content, onClickCitation = onClickCitation
+            val borderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+            val bgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+            Column(
+                modifier = Modifier
+                    .drawWithContent {
+                        drawContent()
+                        drawRect(
+                            color = bgColor, size = size
+                        )
+                        drawRect(
+                            color = borderColor, size = Size(10f, size.height)
                         )
                     }
+                    .padding(8.dp)) {
+                node.children.fastForEach { child ->
+                    MarkdownNode(
+                        node = child, content = content, onClickCitation = onClickCitation
+                    )
                 }
             }
         }
@@ -1021,7 +1012,12 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
         node.type == GFMTokenTypes.GFM_AUTOLINK -> {
             val link = node.getTextInNode(content)
             withLink(LinkAnnotation.Url(link)) {
-                withStyle(italicStyle) {
+                withStyle(
+                    SpanStyle(
+                        color = colorScheme.primary,
+                        textDecoration = TextDecoration.Underline
+                    )
+                ) {
                     append(link)
                 }
             }
@@ -1161,7 +1157,12 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             val links = node.children.trim(MarkdownTokenTypes.LT, 1).trim(MarkdownTokenTypes.GT, 1)
             links.fastForEach { link ->
                 withLink(LinkAnnotation.Url(link.getTextInNode(content))) {
-                    withStyle(italicStyle) {
+                    withStyle(
+                        SpanStyle(
+                            color = colorScheme.primary,
+                            textDecoration = TextDecoration.Underline
+                        )
+                    ) {
                         append(link.getTextInNode(content))
                     }
                 }

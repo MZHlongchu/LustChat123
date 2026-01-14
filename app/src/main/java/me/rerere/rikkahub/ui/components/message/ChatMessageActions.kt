@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -41,12 +42,16 @@ import androidx.compose.material.icons.automirrored.rounded.CallSplit
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.OpenInBrowser
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.StopCircle
+import androidx.compose.material.icons.rounded.Translate
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import kotlinx.coroutines.delay
 import kotlinx.datetime.toJavaLocalDateTime
@@ -60,7 +65,11 @@ import me.rerere.rikkahub.data.datastore.getEffectiveDisplaySetting
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalTTSState
+import me.rerere.rikkahub.utils.ObfuscationResult
+import me.rerere.rikkahub.utils.ObfuscationType
+import me.rerere.rikkahub.utils.containsInvisibleChars
 import me.rerere.rikkahub.utils.copyMessageToClipboard
+import me.rerere.rikkahub.utils.obfuscate
 import me.rerere.rikkahub.utils.toLocalString
 
 @Composable
@@ -73,12 +82,15 @@ fun ColumnScope.ChatMessageActionButtons(
     onEditLorebookEntry: ((UsedLorebookEntry) -> Unit)? = null,
     onModeClick: ((me.rerere.ai.ui.UsedMode) -> Unit)? = null,
     onMemoryClick: ((me.rerere.ai.ui.UsedMemory) -> Unit)? = null,
+    onObfuscateAll: (ObfuscationType) -> Unit = {},
+    onObfuscateResult: (ObfuscationResult) -> Unit = {},
 ) {
     val context = LocalContext.current
     val settings = LocalSettings.current
     val effectiveDisplay = settings.getEffectiveDisplaySetting()
     var isPendingDelete by remember { mutableStateOf(false) }
     var showContextSheet by remember { mutableStateOf(false) }
+    var showObfuscateDialog by remember { mutableStateOf(false) }
     
     val usedEntries = message.usedLorebookEntries ?: emptyList()
     val usedModes = message.usedModes ?: emptyList()
@@ -173,6 +185,25 @@ fun ColumnScope.ChatMessageActionButtons(
             )
         }
 
+        // Obfuscation button
+        if (effectiveDisplay.showObfuscationButton) {
+            Icon(
+                imageVector = Icons.Rounded.VisibilityOff,
+                contentDescription = stringResource(R.string.obfuscate),
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = LocalIndication.current,
+                        onClick = {
+                            showObfuscateDialog = true
+                        }
+                    )
+                    .padding(8.dp)
+                    .size(16.dp)
+            )
+        }
+
         Icon(
             imageVector = Icons.Rounded.MoreHoriz,
             contentDescription = stringResource(R.string.a11y_more_options),
@@ -189,10 +220,159 @@ fun ColumnScope.ChatMessageActionButtons(
                 .size(16.dp)
         )
 
+        val hasInvisibleChars = remember(message.parts) {
+            message.toText().containsInvisibleChars()
+        }
+        if (hasInvisibleChars) {
+            Icon(
+                imageVector = Icons.Rounded.Fingerprint,
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(4.dp)
+                    .size(10.dp),
+                tint = LocalContentColor.current.copy(alpha = 0.5f)
+            )
+        }
+
         ChatMessageBranchSelector(
             node = node,
             onUpdate = onUpdate,
         )
+    }
+
+    // Obfuscation dialog
+    if (showObfuscateDialog) {
+        ObfuscationSelectionDialog(
+            onOptionSelected = { option, applyToAll ->
+                showObfuscateDialog = false
+                if (applyToAll) {
+                    onObfuscateAll(option)
+                } else {
+                    onObfuscateResult(node.obfuscate(option))
+                }
+            },
+            onDismissRequest = {
+                showObfuscateDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+fun ObfuscationSelectionDialog(
+    onOptionSelected: (ObfuscationType, Boolean) -> Unit,
+    onDismissRequest: () -> Unit,
+) {
+    var applyToAll by remember { mutableStateOf(false) }
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = stringResource(R.string.obfuscation_title),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.medium)
+                    .clickable { applyToAll = !applyToAll }
+                    .padding(8.dp)
+            ) {
+                Checkbox(
+                    checked = applyToAll,
+                    onCheckedChange = { applyToAll = it }
+                )
+                Text(
+                    text = stringResource(R.string.obfuscation_apply_to_all),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            // Cyrillic to Latin
+            Card(
+                onClick = {
+                    onOptionSelected(ObfuscationType.CYRILLIC_TO_LATIN, applyToAll)
+                },
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Translate,
+                        contentDescription = null,
+                        modifier = Modifier.padding(4.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.obfuscation_cyrillic_to_latin),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+            }
+            // Invisible characters
+            Card(
+                onClick = {
+                    onOptionSelected(ObfuscationType.INVISIBLE_CHARS, applyToAll)
+                },
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.VisibilityOff,
+                        contentDescription = null,
+                        modifier = Modifier.padding(4.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.obfuscation_invisible_chars),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+            }
+            // Homoglyphs
+            Card(
+                onClick = {
+                    onOptionSelected(ObfuscationType.HOMOGLYPHS, applyToAll)
+                },
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.TextFields,
+                        contentDescription = null,
+                        modifier = Modifier.padding(4.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.obfuscation_homoglyphs),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+            }
+        }
     }
 }
 

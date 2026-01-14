@@ -320,7 +320,9 @@ fun MarkdownBlock(
     content: String,
     modifier: Modifier = Modifier,
     style: TextStyle = LocalTextStyle.current,
-    onClickCitation: (String) -> Unit = {}
+    onClickCitation: (String) -> Unit = {},
+    highlightIndices: List<Int>? = null,
+    highlightKey: Int = 0
 ) {
     // Read rpStyleRules from settings
     val settings = LocalSettings.current
@@ -358,7 +360,11 @@ fun MarkdownBlock(
             ) {
                 astTree.children.fastForEach { child ->
                     MarkdownNode(
-                        node = child, content = preprocessed, onClickCitation = onClickCitation
+                        node = child,
+                        content = preprocessed,
+                        onClickCitation = onClickCitation,
+                        highlightIndices = highlightIndices,
+                        highlightKey = highlightKey
                     )
                 }
             }
@@ -452,14 +458,21 @@ private fun MarkdownNode(
     content: String,
     modifier: Modifier = Modifier,
     onClickCitation: (String) -> Unit = {},
-    listLevel: Int = 0
+    listLevel: Int = 0,
+    highlightIndices: List<Int>? = null,
+    highlightKey: Int = 0
 ) {
     when (node.type) {
         // 文件根节点
         MarkdownElementTypes.MARKDOWN_FILE -> {
             node.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                    node = child,
+                    content = content,
+                    modifier = modifier,
+                    onClickCitation = onClickCitation,
+                    highlightIndices = highlightIndices,
+                    highlightKey = highlightKey
                 )
             }
         }
@@ -467,7 +480,12 @@ private fun MarkdownNode(
         // 段落
         MarkdownElementTypes.PARAGRAPH -> {
             Paragraph(
-                node = node, content = content, modifier = modifier, onClickCitation = onClickCitation
+                node = node,
+                content = content,
+                modifier = modifier,
+                onClickCitation = onClickCitation,
+                highlightIndices = highlightIndices,
+                highlightKey = highlightKey
             )
         }
 
@@ -509,7 +527,9 @@ private fun MarkdownNode(
                 content = content,
                 modifier = modifier.padding(vertical = 4.dp),
                 onClickCitation = onClickCitation,
-                level = listLevel
+                level = listLevel,
+                highlightIndices = highlightIndices,
+                highlightKey = highlightKey
             )
         }
 
@@ -519,7 +539,9 @@ private fun MarkdownNode(
                 content = content,
                 modifier = modifier.padding(vertical = 4.dp),
                 onClickCitation = onClickCitation,
-                level = listLevel
+                level = listLevel,
+                highlightIndices = highlightIndices,
+                highlightKey = highlightKey
             )
         }
 
@@ -568,7 +590,11 @@ private fun MarkdownNode(
                     .padding(8.dp)) {
                 node.children.fastForEach { child ->
                     MarkdownNode(
-                        node = child, content = content, onClickCitation = onClickCitation
+                        node = child,
+                        content = content,
+                        onClickCitation = onClickCitation,
+                        highlightIndices = highlightIndices,
+                        highlightKey = highlightKey
                     )
                 }
             }
@@ -601,7 +627,12 @@ private fun MarkdownNode(
             ProvideTextStyle(TextStyle().merge(italicStyle)) {
                 node.children.fastForEach { child ->
                     MarkdownNode(
-                        node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                        node = child,
+                        content = content,
+                        modifier = modifier,
+                        onClickCitation = onClickCitation,
+                        highlightIndices = highlightIndices,
+                        highlightKey = highlightKey
                     )
                 }
             }
@@ -611,7 +642,12 @@ private fun MarkdownNode(
             ProvideTextStyle(TextStyle(fontWeight = FontWeight.SemiBold)) {
                 node.children.fastForEach { child ->
                     MarkdownNode(
-                        node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                        node = child,
+                        content = content,
+                        modifier = modifier,
+                        onClickCitation = onClickCitation,
+                        highlightIndices = highlightIndices,
+                        highlightKey = highlightKey
                     )
                 }
             }
@@ -750,7 +786,12 @@ private fun MarkdownNode(
             // 递归处理其他节点的子节点
             node.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                    node = child,
+                    content = content,
+                    modifier = modifier,
+                    onClickCitation = onClickCitation,
+                    highlightIndices = highlightIndices,
+                    highlightKey = highlightKey
                 )
             }
         }
@@ -763,7 +804,9 @@ private fun UnorderedListNode(
     content: String,
     modifier: Modifier = Modifier,
     onClickCitation: (String) -> Unit = {},
-    level: Int = 0
+    level: Int = 0,
+    highlightIndices: List<Int>? = null,
+    highlightKey: Int = 0
 ) {
     val bulletStyle = when (level % 3) {
         0 -> "• "
@@ -781,7 +824,9 @@ private fun UnorderedListNode(
                     content = content,
                     bulletText = bulletStyle,
                     onClickCitation = onClickCitation,
-                    level = level
+                    level = level,
+                    highlightIndices = highlightIndices,
+                    highlightKey = highlightKey
                 )
             }
         }
@@ -794,7 +839,9 @@ private fun OrderedListNode(
     content: String,
     modifier: Modifier = Modifier,
     onClickCitation: (String) -> Unit = {},
-    level: Int = 0
+    level: Int = 0,
+    highlightIndices: List<Int>? = null,
+    highlightKey: Int = 0
 ) {
     Column(modifier.padding(start = (level * 8).dp)) {
         var index = 1
@@ -807,7 +854,9 @@ private fun OrderedListNode(
                     content = content,
                     bulletText = numberText,
                     onClickCitation = onClickCitation,
-                    level = level
+                    level = level,
+                    highlightIndices = highlightIndices,
+                    highlightKey = highlightKey
                 )
                 index++
             }
@@ -817,7 +866,13 @@ private fun OrderedListNode(
 
 @Composable
 private fun ListItemNode(
-    node: ASTNode, content: String, bulletText: String, onClickCitation: (String) -> Unit = {}, level: Int
+    node: ASTNode,
+    content: String,
+    bulletText: String,
+    onClickCitation: (String) -> Unit = {},
+    level: Int,
+    highlightIndices: List<Int>? = null,
+    highlightKey: Int = 0
 ) {
     Column {
         // 分离列表项的直接内容和嵌套列表
@@ -838,6 +893,8 @@ private fun ListItemNode(
                             content = content,
                             onClickCitation = onClickCitation,
                             listLevel = level,
+                            highlightIndices = highlightIndices,
+                            highlightKey = highlightKey
                         )
                     }
                 }
@@ -846,7 +903,12 @@ private fun ListItemNode(
         // nestedLists 渲染处理
         nestedLists.fastForEach { nestedList ->
             MarkdownNode(
-                node = nestedList, content = content, onClickCitation = onClickCitation, listLevel = level + 1 // 增加层级
+                node = nestedList,
+                content = content,
+                onClickCitation = onClickCitation,
+                listLevel = level + 1, // 增加层级
+                highlightIndices = highlightIndices,
+                highlightKey = highlightKey
             )
         }
     }
@@ -877,13 +939,36 @@ private fun Paragraph(
     trim: Boolean = false,
     onClickCitation: (String) -> Unit = {},
     modifier: Modifier,
+    highlightIndices: List<Int>? = null,
+    highlightKey: Int = 0
 ) {
+    val textStyle = LocalTextStyle.current
+    val contentColor = androidx.compose.material3.LocalContentColor.current
+    val targetColor = if (textStyle.color != Color.Unspecified) textStyle.color else contentColor
+    val highlightColor = remember { androidx.compose.animation.Animatable(targetColor) }
+    LaunchedEffect(highlightKey) {
+        if (highlightIndices != null) {
+            highlightColor.snapTo(Color.Red)
+            kotlinx.coroutines.delay(2000)
+            highlightColor.animateTo(
+                targetValue = targetColor,
+                animationSpec = androidx.compose.animation.core.tween(
+                    durationMillis = 1000,
+                    easing = androidx.compose.animation.core.LinearEasing
+                )
+            )
+        }
+    }
     // dumpAst(node, content)
     if (node.findChildOfTypeRecursive(MarkdownElementTypes.IMAGE, GFMElementTypes.BLOCK_MATH) != null) {
         FlowRow(modifier = modifier) {
             node.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = content, onClickCitation = onClickCitation
+                    node = child,
+                    content = content,
+                    onClickCitation = onClickCitation,
+                    highlightIndices = highlightIndices,
+                    highlightKey = highlightKey
                 )
             }
         }
@@ -898,7 +983,6 @@ private fun Paragraph(
         node.findChildOfTypeRecursive(GFMElementTypes.INLINE_MATH) != null
     }
 
-    val textStyle = LocalTextStyle.current
     val density = LocalDensity.current
     val rpStyleRules = LocalSettings.current.displaySetting.rpStyleRules
     val italicStyle = italicSpanStyle(
@@ -911,7 +995,8 @@ private fun Paragraph(
             else Modifier
         )
     ) {
-        val annotatedString = remember(content, rpStyleRules) {
+        val animatedHighlightColor = highlightColor.value
+        val annotatedString = remember(content, rpStyleRules, animatedHighlightColor) {
             buildAnnotatedString {
                 node.children.fastForEach { child ->
                     appendMarkdownNodeContent(
@@ -925,6 +1010,8 @@ private fun Paragraph(
                         density = density,
                         trim = trim,
                         rpStyleRules = rpStyleRules,
+                        highlightIndices = highlightIndices,
+                        highlightColor = animatedHighlightColor
                     )
                 }
             }
@@ -1005,6 +1092,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
     italicStyle: SpanStyle,
     onClickCitation: (String) -> Unit = {},
     rpStyleRules: List<RpStyleRule> = emptyList(),
+    highlightIndices: List<Int>? = null,
+    highlightColor: Color = Color.Unspecified
 ) {
     when {
         node.type == MarkdownTokenTypes.BLOCK_QUOTE -> {}
@@ -1032,7 +1121,33 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                 }.replace(BREAK_LINE_REGEX, "\n")
             }
             // Use custom pattern scanning for plain text
-            appendTextWithCustomPatterns(text, rpStyleRules)
+            
+            if (highlightIndices != null && highlightColor != Color.Unspecified) {
+                // If highlighting is active, manually construct colored string char by char
+                // This is expensive but necessary for per-character highlighting
+                // Note: RP styles and custom patterns are temporarily bypassed during highlighting for simplicity
+                // or we could try to combine them, but mixing spans is complex.
+                // For now, let's just apply highlighting logic on top of base text.
+                
+                // However, appendTextWithCustomPatterns also does complex regex matching.
+                // Reconciling both is hard.
+                // A simpler approach for obfuscation highlight:
+                // Just check if we have highlighting to do.
+                
+                val startOffset = node.startOffset
+                text.forEachIndexed { index, char ->
+                    val globalIndex = startOffset + index
+                    if (globalIndex in highlightIndices) {
+                        withStyle(SpanStyle(color = highlightColor)) {
+                            append(char)
+                        }
+                    } else {
+                        append(char)
+                    }
+                }
+            } else {
+                appendTextWithCustomPatterns(text, rpStyleRules)
+            }
         }
 
         node.type == MarkdownElementTypes.EMPH -> {
@@ -1050,7 +1165,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                         style = style,
                         italicStyle = italicStyle,
                         onClickCitation = onClickCitation,
-                        rpStyleRules = rpStyleRules
+                        rpStyleRules = rpStyleRules,
+                        highlightIndices = highlightIndices,
+                        highlightColor = highlightColor
                     )
                 }
             }
@@ -1071,7 +1188,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                         style = style,
                         italicStyle = italicStyle,
                         onClickCitation = onClickCitation,
-                        rpStyleRules = rpStyleRules
+                        rpStyleRules = rpStyleRules,
+                        highlightIndices = highlightIndices,
+                        highlightColor = highlightColor
                     )
                 }
             }
@@ -1092,7 +1211,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                         style = style,
                         italicStyle = italicStyle,
                         onClickCitation = onClickCitation,
-                        rpStyleRules = rpStyleRules
+                        rpStyleRules = rpStyleRules,
+                        highlightIndices = highlightIndices,
+                        highlightColor = highlightColor
                     )
                 }
             }
@@ -1220,7 +1341,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                     style = style,
                     italicStyle = italicStyle,
                     onClickCitation = onClickCitation,
-                    rpStyleRules = rpStyleRules
+                    rpStyleRules = rpStyleRules,
+                    highlightIndices = highlightIndices,
+                    highlightColor = highlightColor
                 )
             }
         }

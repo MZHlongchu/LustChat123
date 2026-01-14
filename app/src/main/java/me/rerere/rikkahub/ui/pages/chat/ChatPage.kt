@@ -122,6 +122,7 @@ import me.rerere.rikkahub.utils.base64Decode
 import me.rerere.rikkahub.utils.createChatFilesByContents
 import me.rerere.rikkahub.utils.getFileMimeType
 import me.rerere.rikkahub.utils.navigateToChatPage
+import me.rerere.rikkahub.utils.obfuscate
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -707,6 +708,13 @@ private fun ChatPageContent(
                         pendingJumpNodeId = nodeId
                         previewMode = false
                     },
+                    onObfuscateAll = { type ->
+                        val newNodes = conversation.messageNodes.map { node ->
+                            node.obfuscate(type).node
+                        }
+                        vm.updateConversation(conversation.copy(messageNodes = newNodes))
+                        vm.saveConversationAsync()
+                    }
                 )
 
                 val hasUserSentMessages =

@@ -502,6 +502,14 @@
   <string name="setting_display_page_mcp_tool_call_timeout_desc">单位：秒</string>
   <string name="setting_display_page_show_tts_button_title">显示 TTS 按钮</string>
   <string name="setting_display_page_show_tts_button_desc">在消息工具栏中显示语音朗读按钮</string>
+  <string name="setting_display_page_show_obfuscation_button_title">显示混淆按钮</string>
+  <string name="setting_display_page_show_obfuscation_button_desc">在消息工具栏中显示混淆按钮</string>
+  <string name="obfuscate">混淆</string>
+  <string name="obfuscation_title">文字混淆</string>
+  <string name="obfuscation_cyrillic_to_latin">西里尔字母转拉丁字母</string>
+  <string name="obfuscation_invisible_chars">添加不可见字符</string>
+  <string name="obfuscation_homoglyphs">添加同形异义字符</string>
+  <string name="obfuscation_apply_to_all">应用到所有消息</string>
   <string name="setting_display_page_show_updates_desc">是否显示应用更新通知</string>
   <string name="setting_display_page_show_updates_title">显示更新</string>
   <string name="setting_display_page_show_user_avatar_desc">是否在聊天消息中显示用户头像</string>

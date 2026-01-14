@@ -15,6 +15,7 @@ import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.model.MessageNode
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.io.encoding.Base64
@@ -260,4 +261,199 @@ fun Context.listImageFiles(): List<File> {
     return imagesDir.listFiles()
         ?.filter { it.isFile && it.extension.lowercase() in listOf("png", "jpg", "jpeg", "webp") }?.toList()
         ?: emptyList()
+}
+
+enum class ObfuscationType {
+    CYRILLIC_TO_LATIN,
+    INVISIBLE_CHARS,
+    HOMOGLYPHS
+}
+
+data class ObfuscationResult(
+    val node: MessageNode,
+    val changedIndices: List<Int> = emptyList()
+)
+
+private val ISO_9_MAP = mapOf(
+    'А' to "A", 'а' to "a",
+    'Б' to "B", 'б' to "b",
+    'В' to "V", 'в' to "v",
+    'Г' to "G", 'г' to "g",
+    'Д' to "D", 'д' to "d",
+    'Е' to "E", 'е' to "e",
+    'Ё' to "Ë", 'ё' to "ë",
+    'Ж' to "Ž", 'ж' to "ž",
+    'З' to "Z", 'з' to "z",
+    'И' to "I", 'и' to "i",
+    'Й' to "J", 'й' to "j",
+    'К' to "K", 'к' to "k",
+    'Л' to "L", 'л' to "l",
+    'М' to "M", 'м' to "m",
+    'Н' to "N", 'н' to "n",
+    'О' to "O", 'о' to "o",
+    'П' to "P", 'п' to "p",
+    'Р' to "R", 'р' to "r",
+    'С' to "S", 'с' to "s",
+    'Т' to "T", 'т' to "t",
+    'У' to "U", 'у' to "u",
+    'Ф' to "F", 'ф' to "f",
+    'Х' to "H", 'х' to "h",
+    'Ц' to "C", 'ц' to "c",
+    'Ч' to "Č", 'ч' to "č",
+    'Ш' to "Š", 'ш' to "š",
+    'Щ' to "Ŝ", 'щ' to "ŝ",
+    'Ъ' to "ʺ", 'ъ' to "ʺ",
+    'Ы' to "Y", 'ы' to "y",
+    'Ь' to "ʹ", 'ь' to "ʹ",
+    'Э' to "È", 'э' to "è",
+    'Ю' to "Û", 'ю' to "û",
+    'Я' to "Â", 'я' to "â"
+)
+
+private val REVERSE_ISO_9_MAP = ISO_9_MAP.entries.associate { it.value to it.key.toString() }
+
+fun obfuscateTextCyrillicToLatin(text: String): String {
+    // Если есть кириллица — транслитерируем в латиницу
+    val hasCyrillic = text.any { it in ISO_9_MAP.keys }
+    if (hasCyrillic) {
+        return text.map { ISO_9_MAP[it] ?: it.toString() }.joinToString("")
+    }
+    // Если кириллицы нет — пытаемся вернуть из латиницы ISO 9 обратно в кириллицу
+    var result = text
+    // Сортируем ключи по длине, чтобы сначала заменять длинные последовательности (если они есть)
+    REVERSE_ISO_9_MAP.keys.sortedByDescending { it.length }.forEach { latin ->
+        if (result.contains(latin)) {
+            result = result.replace(latin, REVERSE_ISO_9_MAP[latin]!!)
+        }
+    }
+    return result
+}
+
+private val HOMOGLYPH_MAP = mapOf(
+    'А' to listOf('A', 'Α'),
+    'Б' to listOf('Ƃ'),
+    'б' to listOf('ნ'),
+    'В' to listOf('B', 'Β', 'Ⲃ'),
+    'Г' to listOf('Γ', 'ᒥ'),
+    'г' to listOf('ᴦ'),
+    'Е' to listOf('E', 'Ε', 'ⴹ'),
+    'Ё' to listOf('Ë'),
+    'З' to listOf('3'),
+    'з' to listOf('ɜ'),
+    'И' to listOf('Ͷ'),
+    'К' to listOf('Ⲕ', 'K', 'Κ', 'Ƙ'),
+    'М' to listOf('Ｍ', 'M', 'Μ', 'Ϻ'),
+    'м' to listOf('ᴍ'),
+    'Н' to listOf('ᕼ', 'H', 'Η', 'Ⲏ'),
+    'О' to listOf('ᱛ', 'O', 'Օ', 'Ο', 'ⵔ', 'Ⲟ', '೦'),
+    'о' to listOf('օ', 'ο', 'o', 'ᴏ', '௦', 'ഠ', 'ⲟ'),
+    'П' to listOf('Π', '∏', 'Ⲡ'),
+    'Р' to listOf('Ρ', 'P', 'Ⲣ'),
+    'С' to listOf('Ⅽ', 'C', 'Ϲ', 'Ⲥ', 'Ꮯ'),
+    'с' to listOf('ᴄ', 'c', 'ϲ', 'ⅽ'),
+    'Т' to listOf('T', 'Τ'),
+    'У' to listOf('Ꭹ'),
+    'Ф' to listOf('Φ', 'Փ'),
+    'Х' to listOf('Ⅹ', 'Χ', 'X'),
+    'я' to listOf('ᴙ'),
+)
+
+private val REVERSE_HOMOGLYPH_MAP = HOMOGLYPH_MAP.flatMap { (k, v) -> v.map { it to k } }.toMap()
+
+fun obfuscateTextHomoglyphs(text: String): Pair<String, List<Int>> {
+    val changedIndices = mutableListOf<Int>()
+    val hasHomoglyphs = text.any { it in REVERSE_HOMOGLYPH_MAP }
+    if (hasHomoglyphs) {
+        // При обратном преобразовании индексы не возвращаем (анимация не нужна)
+        return text.map { REVERSE_HOMOGLYPH_MAP[it] ?: it }.joinToString("") to emptyList()
+    }
+    val sb = StringBuilder()
+    var currentOffset = 0
+    val tokens = text.split(Regex("(?<=\\s)|(?=\\s)"))
+    tokens.forEach { token ->
+        if (token.isBlank()) {
+            sb.append(token)
+            currentOffset += token.length
+        } else {
+            val letterCount = token.count { it.isLetter() }
+            if (letterCount < 2) {
+                sb.append(token)
+                currentOffset += token.length
+            } else {
+                val candidates = token.withIndex().filter { it.value in HOMOGLYPH_MAP }
+                if (candidates.isEmpty()) {
+                    sb.append(token)
+                    currentOffset += token.length
+                } else {
+                    val target = candidates.random()
+                    val homoglyph = HOMOGLYPH_MAP[target.value]!!.random()
+                    // Запоминаем глобальный индекс изменённого символа
+                    changedIndices.add(currentOffset + target.index)
+                    val tokenSb = StringBuilder(token)
+                    tokenSb.setCharAt(target.index, homoglyph)
+                    val resultToken = tokenSb.toString()
+                    sb.append(resultToken)
+                    currentOffset += resultToken.length
+                }
+            }
+        }
+    }
+    return sb.toString() to changedIndices
+}
+
+fun obfuscateTextInvisible(text: String): String {
+    val invisibleChar = "\u200B"
+    if (text.contains(invisibleChar)) {
+        return text.replace(invisibleChar, "")
+    }
+    // Регулярка для разделения на токены (слова и пробелы)
+    val tokens = text.split(Regex("(?<=\\s)|(?=\\s)"))
+    return tokens.joinToString("") { token ->
+        if (token.isBlank() || token.length < 2) {
+            token
+        } else {
+            // Ищем подходящие места между буквами
+            val validSlots = mutableListOf<Int>()
+            for (i in 0 until token.length - 1) {
+                if (token[i].isLetter() && token[i + 1].isLetter()) {
+                    validSlots.add(i + 1)
+                }
+            }
+            if (validSlots.isEmpty()) {
+                token
+            } else {
+                val insertAt = validSlots.random()
+                StringBuilder(token).insert(insertAt, invisibleChar).toString()
+            }
+        }
+    }
+}
+
+/**
+ * Обфусцировать текущее сообщение в узле.
+ */
+fun MessageNode.obfuscate(type: ObfuscationType): ObfuscationResult {
+    var allChangedIndices = emptyList<Int>()
+    val currentMessage = this.currentMessage
+    val newParts = currentMessage.parts.map { part ->
+        if (part is UIMessagePart.Text) {
+            when (type) {
+                ObfuscationType.INVISIBLE_CHARS -> part.copy(text = obfuscateTextInvisible(part.text))
+                ObfuscationType.CYRILLIC_TO_LATIN -> part.copy(text = obfuscateTextCyrillicToLatin(part.text))
+                ObfuscationType.HOMOGLYPHS -> {
+                    val (newText, indices) = obfuscateTextHomoglyphs(part.text)
+                    allChangedIndices = indices
+                    part.copy(text = newText)
+                }
+            }
+        } else part
+    }
+    val newMessage = currentMessage.copy(parts = newParts)
+    val newMessages = messages.toMutableList().apply {
+        set(selectIndex, newMessage)
+    }
+    return ObfuscationResult(
+        node = copy(messages = newMessages),
+        changedIndices = allChangedIndices
+    )
 }

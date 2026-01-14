@@ -983,6 +983,7 @@ data class DisplaySetting(
     val providerViewMode: ProviderViewMode = ProviderViewMode.LIST, // Provider page view mode
     val showContextStacks: Boolean = false, // Show context sources (modes, memories, lorebooks) in message toolbar
     val showTtsButton: Boolean = true, // Show TTS button in message toolbar
+    val showObfuscationButton: Boolean = true, // Show obfuscation button in message toolbar
 )
 
 fun DisplaySetting.coerceForConflicts(): DisplaySetting {
@@ -1083,6 +1084,7 @@ fun Settings.getEffectiveDisplaySetting(assistant: Assistant? = null): DisplaySe
         codeBlockAutoCollapse = ui.codeBlockAutoCollapse ?: displaySetting.codeBlockAutoCollapse,
         showContextStacks = ui.showContextStacks ?: displaySetting.showContextStacks,
         showTtsButton = ui.showTtsButton ?: displaySetting.showTtsButton,
+        showObfuscationButton = ui.showObfuscationButton ?: displaySetting.showObfuscationButton,
     )
 }
 

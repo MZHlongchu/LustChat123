@@ -1370,6 +1370,14 @@
     <string name="setting_display_page_show_context_stacks_desc">Показывать источники контекста (режимы, память, лорбуки) в панели сообщений</string>
     <string name="setting_display_page_show_tts_button_title">Показать кнопку TTS</string>
     <string name="setting_display_page_show_tts_button_desc">Показывать кнопку озвучивания в панели сообщений</string>
+    <string name="setting_display_page_show_obfuscation_button_title">Показать кнопку обфускации</string>
+    <string name="setting_display_page_show_obfuscation_button_desc">Показывать кнопку обфускации в панели сообщений</string>
+    <string name="obfuscate">Обфускация</string>
+    <string name="obfuscation_title">Обфускация текста</string>
+    <string name="obfuscation_cyrillic_to_latin">Кириллица в латиницу</string>
+    <string name="obfuscation_invisible_chars">Невидимые символы</string>
+    <string name="obfuscation_homoglyphs">Омоглифы</string>
+    <string name="obfuscation_apply_to_all">Применить ко всем сообщениям</string>
     <string name="setting_display_page_ui_haptics_title">Виброотклик интерфейса</string>
     <string name="setting_display_page_ui_haptics_desc">Включить тактильную отдачу при нажатии кнопок и элементов управления</string>
     <string name="setting_display_page_section_advanced">Дополнительно</string>

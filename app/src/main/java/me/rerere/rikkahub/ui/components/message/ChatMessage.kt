@@ -99,6 +99,7 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.utils.ObfuscationType
 import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.formatNumber
 import me.rerere.rikkahub.utils.openUrl
@@ -129,8 +130,17 @@ fun ChatMessage(
     onEditLorebookEntry: ((me.rerere.ai.ui.UsedLorebookEntry) -> Unit)? = null,
     onModeClick: ((me.rerere.ai.ui.UsedMode) -> Unit)? = null,
     onMemoryClick: ((me.rerere.ai.ui.UsedMemory) -> Unit)? = null,
+    onObfuscateAll: (ObfuscationType) -> Unit = {},
 ) {
     val message = node.messages[node.selectIndex]
+    var highlightIndices by remember { mutableStateOf<List<Int>?>(null) }
+    var highlightKey by remember { mutableStateOf(0) }
+    LaunchedEffect(highlightIndices) {
+        if (highlightIndices != null) {
+            kotlinx.coroutines.delay(3000)
+            highlightIndices = null
+        }
+    }
     val settings = LocalSettings.current.displaySetting
     val textStyle = LocalTextStyle.current.copy(
         fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
@@ -218,6 +228,8 @@ fun ChatMessage(
                 usage = message.usage,
                 generationDurationMs = message.generationDurationMs,
                 showTokenUsage = settings.showTokenUsage,
+                highlightIndices = highlightIndices,
+                highlightKey = highlightKey
             )
         }
 
@@ -266,6 +278,14 @@ fun ChatMessage(
                 onEditLorebookEntry = onEditLorebookEntry,
                 onModeClick = onModeClick,
                 onMemoryClick = onMemoryClick,
+                onObfuscateAll = onObfuscateAll,
+                onObfuscateResult = { result ->
+                    onUpdate(result.node)
+                    if (result.changedIndices.isNotEmpty()) {
+                        highlightIndices = result.changedIndices
+                        highlightKey++
+                    }
+                }
             )
         }
     }
@@ -325,6 +345,8 @@ private fun MessagePartsBlock(
     usage: me.rerere.ai.core.TokenUsage? = null,
     generationDurationMs: Long? = null,
     showTokenUsage: Boolean = false,
+    highlightIndices: List<Int>? = null,
+    highlightKey: Int = 0
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
@@ -379,7 +401,9 @@ private fun MessagePartsBlock(
                         ),
                         onClickCitation = { id ->
                             handleClickCitation(id)
-                        }
+                        },
+                        highlightIndices = highlightIndices,
+                        highlightKey = highlightKey
                     )
                 }
             }
@@ -400,7 +424,9 @@ private fun MessagePartsBlock(
                             dampingRatio = 0.7f,
                             stiffness = 300f
                         )
-                    )
+                    ),
+                highlightIndices = highlightIndices,
+                highlightKey = highlightKey
             )
         }
     }

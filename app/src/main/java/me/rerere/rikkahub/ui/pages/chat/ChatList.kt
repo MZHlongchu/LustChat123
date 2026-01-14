@@ -121,6 +121,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.ui.hooks.HapticPattern
 import me.rerere.rikkahub.ui.hooks.rememberPremiumHaptics
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.utils.ObfuscationType
 import me.rerere.rikkahub.utils.openUrl
 
 private const val TAG = "ChatList"
@@ -165,6 +166,7 @@ fun ChatList(
     onDeleteNode: (MessageNode) -> Unit = {},
     onUpdateMessage: (MessageNode) -> Unit = {},
     onJumpToMessage: (Uuid) -> Unit = {},
+    onObfuscateAll: (ObfuscationType) -> Unit = {},
 ) {
     SharedTransitionLayout {
         AnimatedContent(
@@ -183,6 +185,7 @@ fun ChatList(
                     onDeleteNode = onDeleteNode,
                     animatedVisibilityScope = this@AnimatedContent,
                     initialSearchQuery = initialSearchQuery,
+                    onObfuscateAll = onObfuscateAll,
                 )
             } else {
                 ChatListNormal(
@@ -198,6 +201,7 @@ fun ChatList(
                     onForkMessage = onForkMessage,
                     onDelete = onDelete,
                     onUpdateMessage = onUpdateMessage,
+                    onObfuscateAll = onObfuscateAll,
                     animatedVisibilityScope = this@AnimatedContent,
                 )
             }
@@ -220,6 +224,7 @@ private fun SharedTransitionScope.ChatListNormal(
     onDelete: (UIMessage) -> Unit,
     onUpdateMessage: (MessageNode) -> Unit,
     animatedVisibilityScope: AnimatedVisibilityScope,
+    onObfuscateAll: (ObfuscationType) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
@@ -416,6 +421,7 @@ private fun SharedTransitionScope.ChatListNormal(
                                     )
                                 )
                             },
+                            onObfuscateAll = onObfuscateAll
                         )
                     }
                     if (index == conversation.truncateIndex - 1) {
@@ -625,6 +631,7 @@ private fun SharedTransitionScope.ChatListPreview(
     onJumpToMessage: (Uuid) -> Unit,
     onDeleteNode: (MessageNode) -> Unit = {},
     initialSearchQuery: String? = null,
+    onObfuscateAll: (ObfuscationType) -> Unit = {},
 ) {
     var searchQuery by remember { mutableStateOf(initialSearchQuery ?: "") }
     val keyboardController = LocalSoftwareKeyboardController.current

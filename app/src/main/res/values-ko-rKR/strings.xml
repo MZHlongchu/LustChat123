@@ -370,6 +370,14 @@
   <string name="setting_display_page_show_updates_title">업데이트 표시</string>
   <string name="setting_display_page_show_tts_button_title">TTS 버튼 표시</string>
   <string name="setting_display_page_show_tts_button_desc">메시지 툴바에 텍스트 음성 변환 버튼 표시</string>
+  <string name="setting_display_page_show_obfuscation_button_title">난독화 버튼 표시</string>
+  <string name="setting_display_page_show_obfuscation_button_desc">메시지 툴바에 난독화 버튼 표시</string>
+  <string name="obfuscate">난독화</string>
+  <string name="obfuscation_title">텍스트 난독화</string>
+  <string name="obfuscation_cyrillic_to_latin">키릴 문자를 라틴 문자로 변환</string>
+  <string name="obfuscation_invisible_chars">보이지 않는 문자 추가</string>
+  <string name="obfuscation_homoglyphs">동형 이의어 문자 추가</string>
+  <string name="obfuscation_apply_to_all">모든 메시지에 적용</string>
   <string name="setting_display_page_show_user_avatar_desc">채팅 메시지에 사용자 아바타를 표시할지 여부</string>
   <string name="setting_display_page_show_user_avatar_title">사용자 아바타 표시</string>
   <string name="setting_display_page_skip_crop_image_desc">이미지를 가져오거나 사진을 찍은 후 자르기 화면 건너뛰기</string>

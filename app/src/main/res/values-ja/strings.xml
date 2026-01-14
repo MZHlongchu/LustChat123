@@ -370,6 +370,14 @@
   <string name="setting_display_page_show_updates_title">アップデートを表示</string>
   <string name="setting_display_page_show_tts_button_title">TTSボタンを表示</string>
   <string name="setting_display_page_show_tts_button_desc">メッセージツールバーに音声読み上げボタンを表示する</string>
+  <string name="setting_display_page_show_obfuscation_button_title">難読化ボタンを表示</string>
+  <string name="setting_display_page_show_obfuscation_button_desc">メッセージツールバーに難読化ボタンを表示する</string>
+  <string name="obfuscate">難読化</string>
+  <string name="obfuscation_title">テキスト難読化</string>
+  <string name="obfuscation_cyrillic_to_latin">キリル文字をラテン文字に変換</string>
+  <string name="obfuscation_invisible_chars">不可視文字を追加</string>
+  <string name="obfuscation_homoglyphs">同形異義文字を追加</string>
+  <string name="obfuscation_apply_to_all">すべてのメッセージに適用</string>
   <string name="setting_display_page_show_user_avatar_desc">チャットメッセージにユーザーアバターを表示するかどうか</string>
   <string name="setting_display_page_show_user_avatar_title">ユーザーアバターを表示</string>
   <string name="setting_display_page_skip_crop_image_desc">画像をインポートするか写真を撮影した後、クロップ画面をスキップ</string>

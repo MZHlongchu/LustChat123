@@ -368,6 +368,8 @@
   <string name="setting_display_page_show_token_usage_title">トークンとコンテキスト統計を表示</string>
   <string name="setting_display_page_show_updates_desc">アプリのアップデート通知を表示するかどうか</string>
   <string name="setting_display_page_show_updates_title">アップデートを表示</string>
+  <string name="setting_display_page_show_tts_button_title">TTSボタンを表示</string>
+  <string name="setting_display_page_show_tts_button_desc">メッセージツールバーに音声読み上げボタンを表示する</string>
   <string name="setting_display_page_show_user_avatar_desc">チャットメッセージにユーザーアバターを表示するかどうか</string>
   <string name="setting_display_page_show_user_avatar_title">ユーザーアバターを表示</string>
   <string name="setting_display_page_skip_crop_image_desc">画像をインポートするか写真を撮影した後、クロップ画面をスキップ</string>

@@ -146,7 +146,7 @@ fun ColumnScope.ChatMessageActionButtons(
                 .size(16.dp)
         )
 
-        if (message.role == MessageRole.ASSISTANT) {
+        if (message.role == MessageRole.ASSISTANT && effectiveDisplay.showTtsButton) {
             val tts = LocalTTSState.current
             val isSpeaking by tts.isSpeaking.collectAsState()
             val isAvailable by tts.isAvailable.collectAsState()

@@ -36,6 +36,7 @@ data class AssistantUISettings(
     val codeBlockAutoWrap: Boolean? = null,
     val codeBlockAutoCollapse: Boolean? = null,
     val showContextStacks: Boolean? = null,
+    val showTtsButton: Boolean? = null,
 )
 
 @Serializable

@@ -982,6 +982,7 @@ data class DisplaySetting(
     val ttsTextFilterRules: List<TtsTextFilterRule> = emptyList(), // TTS text filter rules
     val providerViewMode: ProviderViewMode = ProviderViewMode.LIST, // Provider page view mode
     val showContextStacks: Boolean = false, // Show context sources (modes, memories, lorebooks) in message toolbar
+    val showTtsButton: Boolean = true, // Show TTS button in message toolbar
 )
 
 fun DisplaySetting.coerceForConflicts(): DisplaySetting {
@@ -1081,6 +1082,7 @@ fun Settings.getEffectiveDisplaySetting(assistant: Assistant? = null): DisplaySe
         codeBlockAutoWrap = ui.codeBlockAutoWrap ?: displaySetting.codeBlockAutoWrap,
         codeBlockAutoCollapse = ui.codeBlockAutoCollapse ?: displaySetting.codeBlockAutoCollapse,
         showContextStacks = ui.showContextStacks ?: displaySetting.showContextStacks,
+        showTtsButton = ui.showTtsButton ?: displaySetting.showTtsButton,
     )
 }
 

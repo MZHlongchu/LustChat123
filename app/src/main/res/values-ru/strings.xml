@@ -1368,6 +1368,8 @@
     <string name="setting_display_page_message_input_style_minimal">Минималистичный</string>
     <string name="setting_display_page_show_context_stacks_title">Показать стеки контекста</string>
     <string name="setting_display_page_show_context_stacks_desc">Показывать источники контекста (режимы, память, лорбуки) в панели сообщений</string>
+    <string name="setting_display_page_show_tts_button_title">Показать кнопку TTS</string>
+    <string name="setting_display_page_show_tts_button_desc">Показывать кнопку озвучивания в панели сообщений</string>
     <string name="setting_display_page_ui_haptics_title">Виброотклик интерфейса</string>
     <string name="setting_display_page_ui_haptics_desc">Включить тактильную отдачу при нажатии кнопок и элементов управления</string>
     <string name="setting_display_page_section_advanced">Дополнительно</string>

@@ -36,7 +36,6 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           TAG_LOWER="$(echo "$TAG" | tr '[:upper:]' '[:lower:]')"
           
-          # 默认值
           FLAVOR="plus"
           BUILD_WITHOUT_FIREBASE="false"
           RENAME_PACKAGE="false"
@@ -48,9 +47,11 @@ jobs:
             BUILD_WITHOUT_FIREBASE="true"
             RENAME_PACKAGE="true"
             NEW_PACKAGE="lustchat.lastchat.rikkafork.cocolal.plus"
+            echo "🌱 Cocolal mode: Custom package, no Firebase"
           elif [[ "$TAG_LOWER" == "foss"* ]]; then
             FLAVOR="plus"
             BUILD_WITHOUT_FIREBASE="true"
+            echo "🌱 FOSS mode: No Firebase"
           elif [[ "$TAG_LOWER" == *"zh"* ]]; then
             FLAVOR="zh"
           elif [[ "$TAG_LOWER" == *"plus"* ]]; then
@@ -58,6 +59,7 @@ jobs:
           else
             FLAVOR="plus"
             BUILD_WITHOUT_FIREBASE="true"
+            echo "⚠️ Default mode: No Firebase"
           fi
           
           echo "flavor=$FLAVOR" >> "$GITHUB_OUTPUT"
@@ -78,40 +80,47 @@ jobs:
           
           echo "🔄 Renaming: $OLD_PKG → $NEW_PKG"
           
-          # ========== 核心重命名逻辑 ==========
-          
           # 1. 更新 build.gradle.kts
           sed -i "s/namespace = \"$OLD_PKG\"/namespace = \"$NEW_PKG\"/" app/build.gradle.kts
           
           # 2. 更新 AndroidManifest.xml
           sed -i "s/package=\"$OLD_PKG\"/package=\"$NEW_PKG\"/" app/src/main/AndroidManifest.xml
           
-          # 3. 创建新目录结构并移动文件
+          # 3. 创建新目录并移动文件
           mkdir -p "app/src/main/java/$NEW_PATH"
           cp -r "app/src/main/java/$OLD_PATH"/* "app/src/main/java/$NEW_PATH/" 2>/dev/null || true
           rm -rf "app/src/main/java/$OLD_PATH"
           
-          # 4. 更新所有 Kotlin 文件的 package 声明
+          # 4. 更新 package 声明
           find "app/src/main/java/$NEW_PATH" -name "*.kt" -type f -exec sed -i "s/^package $OLD_PKG/package $NEW_PKG/" {} \;
           
-          # 5. 全局替换 import 语句（包括 flavor 源码）
+          # 5. 全局替换 import
           find app/src -name "*.kt" -type f -exec sed -i "s/import $OLD_PKG/import $NEW_PKG/g" {} \;
           
-          # 6. 更新 XML 资源中的组件引用
+          # 6. 更新 XML 引用
           find app/src -name "*.xml" -type f -exec sed -i "s/android:name=\"\.$OLD_PKG/android:name=\".$NEW_PKG/g" {} \;
           find app/src -name "*.xml" -type f -exec sed -i "s/android:name=\"$OLD_PKG/android:name=\"$NEW_PKG/g" {} \;
           
           echo "✅ Package rename completed"
 
-      - name: Clean build cache
+      - name: ⚠️ CRITICAL: Disable KSP incremental compilation
         if: steps.config.outputs.rename_package == 'true'
         run: |
-          echo "🧹 Cleaning all Gradle caches..."
+          # 禁用 KSP 增量编译以防止缓存污染
+          echo "ksp.incremental=false" >> local.properties
+          echo "ksp.incremental.log=true" >> local.properties
+          echo "✅ KSP incremental compilation DISABLED"
+
+      - name: ⚠️ CRITICAL: Clean all build caches
+        if: steps.config.outputs.rename_package == 'true'
+        run: |
+          echo "🧹 Cleaning EVERYTHING..."
           rm -rf ~/.gradle/caches
           rm -rf ~/.gradle/daemon
           rm -rf app/build
           rm -rf build
-          ./gradlew clean --no-daemon
+          ./gradlew clean --no-daemon --rerun-tasks
+          echo "✅ All caches purged"
 
       - name: Prepare Firebase config
         env:
@@ -162,3 +171,4 @@ jobs:
           files: app/build/outputs/apk/${{ steps.config.outputs.flavor }}/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

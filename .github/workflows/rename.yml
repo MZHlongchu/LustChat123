@@ -1,0 +1,180 @@
+name: Android Release Build
+
+on:
+  push:
+    tags:
+      - "*zh*"
+      - "*plus*"
+      - "foss*"
+      - "cocolal*"
+      - "[0-9]*"
+
+permissions:
+  contents: write     
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Detect flavor and build configuration
+        id: flavor
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_REF_NAME}"
+          TAG_LOWER="$(printf '%s' "$TAG" | tr '[:upper:]' '[:lower:]')"
+
+          # 默认配置
+          flavor="plus"
+          build_without_firebase="false"
+          rename_package="false"
+          new_package=""
+
+          # 检测构建类型
+          if [[ "$TAG_LOWER" == "cocolal"* ]]; then
+            flavor="plus"
+            build_without_firebase="true"
+            rename_package="true"
+            new_package="lustchat.lastchat.rikkafork.cocolal.plus"
+            echo "🌱 Cocolal mode: plus flavor, renamed package, no Firebase"
+          elif [[ "$TAG_LOWER" == "foss"* ]]; then
+            flavor="plus"
+            build_without_firebase="true"
+            echo "🌱 FOSS mode: plus flavor, no Firebase"
+          elif [[ "$TAG_LOWER" == *"zh"* ]]; then
+            flavor="zh"
+            build_without_firebase="false"
+          elif [[ "$TAG_LOWER" == *"plus"* ]]; then
+            flavor="plus"
+            build_without_firebase="false"
+          else
+            # 默认无 Firebase 构建
+            flavor="plus"
+            build_without_firebase="true"
+            echo "⚠️ Default mode: plus flavor without Firebase"
+          fi
+
+          echo "flavor=$flavor" >> "$GITHUB_OUTPUT"
+          echo "build_without_firebase=$build_without_firebase" >> "$GITHUB_OUTPUT"
+          echo "rename_package=$rename_package" >> "$GITHUB_OUTPUT"
+          echo "new_package=$new_package" >> "$GITHUB_OUTPUT"
+          echo "Detected: flavor=$flavor, firebase=$build_without_firebase, rename=$rename_package"
+
+      - name: Rename package (if needed)
+        if: steps.flavor.outputs.rename_package == 'true'
+        run: |
+          set -euo pipefail
+          
+          OLD_PACKAGE="me.rerere.rikkahub"
+          NEW_PACKAGE="${{ steps.flavor.outputs.new_package }}"
+          
+          echo "Renaming package from $OLD_PACKAGE to $NEW_PACKAGE"
+          
+          # 1. 修改 build.gradle.kts 中的 namespace
+          sed -i "s/namespace = \"$OLD_PACKAGE\"/namespace = \"$NEW_PACKAGE\"/" app/build.gradle.kts
+          
+          # 2. 重命名源码目录
+          OLD_PATH_DIR=$(echo "$OLD_PACKAGE" | tr '.' '/')
+          NEW_PATH_DIR=$(echo "$NEW_PACKAGE" | tr '.' '/')
+          
+          mkdir -p "app/src/main/java/$NEW_PATH_DIR"
+          cp -r "app/src/main/java/$OLD_PATH_DIR"/* "app/src/main/java/$NEW_PATH_DIR"/
+          
+          # 3. 更新所有源文件的 package 声明
+          find "app/src/main/java/$NEW_PATH_DIR" -name "*.kt" -type f -exec sed -i "s/^package $OLD_PACKAGE/package $NEW_PACKAGE/" {} \;
+          
+          # 4. 更新 import 语句（仅针对应用内部类）
+          find app/src -name "*.kt" -type f -exec sed -i "s/import $OLD_PACKAGE/import $NEW_PACKAGE/g" {} \;
+          
+          # 5. 清理旧目录
+          rm -rf "app/src/main/java/$OLD_PATH_DIR"
+          
+          echo "✅ Package renamed successfully"
+
+      - name: Prepare build files
+        env:
+          GOOGLE_SERVICES_JSON_B64_PLUS: ${{ secrets.GOOGLE_SERVICES_JSON_B64_PLUS }}
+          GOOGLE_SERVICES_JSON_B64_ZH: ${{ secrets.GOOGLE_SERVICES_JSON_B64_ZH }}
+        run: |
+          set -euo pipefail
+
+          FLAVOR="${{ steps.flavor.outputs.flavor }}"
+          BUILD_WITHOUT_FIREBASE="${{ steps.flavor.outputs.build_without_firebase }}"
+          RENAME_PACKAGE="${{ steps.flavor.outputs.rename_package }}"
+          
+          mkdir -p "app/src/$FLAVOR"
+
+          # 仅在非 FOSS/非重命名模式且密钥存在时创建 google-services.json
+          if [[ "$BUILD_WITHOUT_FIREBASE" == "false" && "$RENAME_PACKAGE" == "false" ]]; then
+            if [[ "$FLAVOR" == "plus" && -n "${GOOGLE_SERVICES_JSON_B64_PLUS:-}" ]]; then
+              printf '%s' "${GOOGLE_SERVICES_JSON_B64_PLUS}" | base64 -d > "app/src/plus/google-services.json"
+              test -s "app/src/plus/google-services.json"
+              echo "✅ Created google-services.json for plus flavor"
+            elif [[ "$FLAVOR" == "zh" && -n "${GOOGLE_SERVICES_JSON_B64_ZH:-}" ]]; then
+              printf '%s' "${GOOGLE_SERVICES_JSON_B64_ZH}" | base64 -d > "app/src/zh/google-services.json"
+              test -s "app/src/zh/google-services.json"
+              echo "✅ Created google-services.json for zh flavor"
+            else
+              echo "⚠️ No google-services.json provided - building without Firebase"
+            fi
+          else
+            echo "🌱 Skipping google-services.json (FOSS/renamed build)"
+          fi
+
+          # 签名配置保持可选
+          if [ -n "${{ secrets.KEY_BASE64 }}" ]; then
+            echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+            echo "✅ Signing key configured"
+          else
+            echo "⚠️ No signing key provided, using debug signing"
+          fi
+
+          if [ -n "${{ secrets.SIGNING_CONFIG }}" ]; then
+            echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+            echo "✅ Signing config applied"
+          else
+            echo "⚠️ No signing config provided"
+          fi
+
+      - name: Gradle Build Release
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+
+          FLAVOR="${{ steps.flavor.outputs.flavor }}"
+          FLAVOR_CAP="${FLAVOR^}"
+          TASK="assemble${FLAVOR_CAP}Release"
+
+          echo "Building release APK ($TASK)..."
+          ./gradlew ":app:$TASK" --no-daemon --stacktrace
+
+      - name: Upload build output (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-${{ steps.flavor.outputs.flavor }}${{ steps.flavor.outputs.build_without_firebase == 'true' && '-foss' || '' }}${{ steps.flavor.outputs.rename_package == 'true' && '-renamed' || '' }}
+          path: app/build/outputs/apk/${{ steps.flavor.outputs.flavor }}/release/*.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            app/build/outputs/apk/${{ steps.flavor.outputs.flavor }}/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

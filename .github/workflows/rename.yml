@@ -41,17 +41,18 @@ jobs:
           RENAME_PACKAGE="false"
           OLD_PACKAGE="me.rerere.rikkahub"
           NEW_PACKAGE=""
+          ARTIFACT_SUFFIX=""
           
           if [[ "$TAG_LOWER" == "cocolal"* ]]; then
             FLAVOR="plus"
             BUILD_WITHOUT_FIREBASE="true"
             RENAME_PACKAGE="true"
             NEW_PACKAGE="lustchat.lastchat.rikkafork.cocolal.plus"
-            echo "🌱 Cocolal mode: Custom package, no Firebase"
+            ARTIFACT_SUFFIX="-cocolal"
           elif [[ "$TAG_LOWER" == "foss"* ]]; then
             FLAVOR="plus"
             BUILD_WITHOUT_FIREBASE="true"
-            echo "🌱 FOSS mode: No Firebase"
+            ARTIFACT_SUFFIX="-foss"
           elif [[ "$TAG_LOWER" == *"zh"* ]]; then
             FLAVOR="zh"
           elif [[ "$TAG_LOWER" == *"plus"* ]]; then
@@ -59,7 +60,7 @@ jobs:
           else
             FLAVOR="plus"
             BUILD_WITHOUT_FIREBASE="true"
-            echo "⚠️ Default mode: No Firebase"
+            ARTIFACT_SUFFIX="-foss"
           fi
           
           echo "flavor=$FLAVOR" >> "$GITHUB_OUTPUT"
@@ -67,6 +68,7 @@ jobs:
           echo "rename_package=$RENAME_PACKAGE" >> "$GITHUB_OUTPUT"
           echo "old_package=$OLD_PACKAGE" >> "$GITHUB_OUTPUT"
           echo "new_package=$NEW_PACKAGE" >> "$GITHUB_OUTPUT"
+          echo "artifact_suffix=$ARTIFACT_SUFFIX" >> "$GITHUB_OUTPUT"
 
       - name: Rename package structure
         if: steps.config.outputs.rename_package == 'true'
@@ -159,7 +161,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-apk-${{ steps.config.outputs.flavor }}${{ steps.config.outputs.build_without_firebase == 'true' && '-foss' || '' }}${{ steps.config.outputs.rename_package == 'true' && '-cocolal' || '' }}
+          name: release-apk-${{ steps.config.outputs.flavor }}${{ steps.config.outputs.artifact_suffix }}
           path: app/build/outputs/apk/${{ steps.config.outputs.flavor }}/release/*.apk
 
       - name: Create Release

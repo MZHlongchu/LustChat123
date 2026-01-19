@@ -42,6 +42,7 @@ jobs:
           OLD_PACKAGE="me.rerere.rikkahub"
           NEW_PACKAGE=""
           ARTIFACT_NAME="release-apk-plus"
+          APK_PATH="app/build/outputs/apk/plus/release"
           
           if [[ "$TAG_LOWER" == "cocolal"* ]]; then
             FLAVOR="plus"
@@ -55,8 +56,11 @@ jobs:
             ARTIFACT_NAME="release-apk-plus-foss"
           elif [[ "$TAG_LOWER" == *"zh"* ]]; then
             FLAVOR="zh"
+            ARTIFACT_NAME="release-apk-zh"
+            APK_PATH="app/build/outputs/apk/zh/release"
           elif [[ "$TAG_LOWER" == *"plus"* ]]; then
             FLAVOR="plus"
+            ARTIFACT_NAME="release-apk-plus"
           else
             FLAVOR="plus"
             BUILD_WITHOUT_FIREBASE="true"
@@ -69,7 +73,7 @@ jobs:
           echo "old_package=$OLD_PACKAGE" >> "$GITHUB_OUTPUT"
           echo "new_package=$NEW_PACKAGE" >> "$GITHUB_OUTPUT"
           echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
-          echo "✅ Configuration: flavor=$FLAVOR, artifact=$ARTIFACT_NAME"
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Rename package structure
         if: steps.config.outputs.rename_package == 'true'
@@ -163,7 +167,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.config.outputs.artifact_name }}
-          path: app/build/outputs/apk/${{ steps.config.outputs.flavor }}/release/*.apk
+          path: ${{ steps.config.outputs.apk_path }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -171,7 +175,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           generate_release_notes: true
-          files: app/build/outputs/apk/${{ steps.config.outputs.flavor }}/release/*.apk
+          files: ${{ steps.config.outputs.apk_path }}/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

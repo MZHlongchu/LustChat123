@@ -110,18 +110,25 @@ jobs:
           
           echo "Package rename completed"
 
-      - name: Disable KSP incremental compilation
+      - name: Configure KSP for clean build
         if: steps.config.outputs.rename_package == 'true'
         run: |
-          # 禁用 KSP 增量编译以防止缓存污染
-          echo "ksp.incremental=false" >> local.properties
-          echo "ksp.incremental.log=true" >> local.properties
-          echo "KSP incremental compilation DISABLED"
+          # 禁用所有缓存和增量编译
+          cat >> local.properties << EOF
+          ksp.incremental=false
+          ksp.incremental.log=true
+          kotlin.incremental=false
+          kotlin.incremental.js=false
+          kotlin.caching.enabled=false
+          org.gradle.caching=false
+          org.gradle.parallel=false
+          EOF
+          echo "KSP and Kotlin caching DISABLED"
 
-      - name: Clean all build caches
+      - name: Purge all build caches
         if: steps.config.outputs.rename_package == 'true'
         run: |
-          echo "Cleaning ALL build caches..."
+          echo "Purging ALL build caches..."
           rm -rf ~/.gradle/caches
           rm -rf ~/.gradle/daemon
           rm -rf app/build
@@ -161,7 +168,9 @@ jobs:
           FLAVOR_CAP=$(echo "$FLAVOR" | sed 's/\b\w/\U&/')
           
           echo "Building ${FLAVOR} flavor..."
-          ./gradlew "app:assemble${FLAVOR_CAP}Release" --no-daemon --stacktrace
+          
+          # 强制重新执行所有任务
+          ./gradlew "app:assemble${FLAVOR_CAP}Release" --no-daemon --rerun-tasks --stacktrace
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

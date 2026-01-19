@@ -1,9 +1,12 @@
-name: Cocolal Package Rename Build
+name: Build Plus Without Keys
 
 on:
   push:
     tags:
+      - "v*"
+      - "plus*"
       - "jxf*"
+      - "foss*"
 
 jobs:
   build:
@@ -19,17 +22,7 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Modify package name
-        run: |
-          # 修改 AndroidManifest.xml
-          sed -i 's/package="me.rerere.rikkahub"/package="lustchat.lastchat.rikkafork.cocolal.plus"/' app/src/main/AndroidManifest.xml
-          
-          # 修改 build.gradle.kts 中的 namespace
-          sed -i 's/namespace = "me.rerere.rikkahub"/namespace = "lustchat.lastchat.rikkafork.cocolal.plus"/' app/build.gradle.kts
-          
-          echo "✅ Package name modified"
-
-      - name: Build Plus Release (No Firebase, No Signing)
+      - name: Build Plus Release
         run: |
           chmod +x gradlew
           ./gradlew assemblePlusRelease --no-daemon --stacktrace
@@ -37,10 +30,11 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: lustchat-cocolal
+          name: lastchat-plus
           path: app/build/outputs/apk/plus/release/*.apk
 
       - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
@@ -49,4 +43,3 @@ jobs:
           files: app/build/outputs/apk/plus/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

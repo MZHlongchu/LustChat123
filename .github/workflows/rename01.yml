@@ -1,0 +1,52 @@
+name: Cocolal Package Rename Build
+
+on:
+  push:
+    tags:
+      - "jxf*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Modify package name
+        run: |
+          # 修改 AndroidManifest.xml
+          sed -i 's/package="me.rerere.rikkahub"/package="lustchat.lastchat.rikkafork.cocolal.plus"/' app/src/main/AndroidManifest.xml
+          
+          # 修改 build.gradle.kts 中的 namespace
+          sed -i 's/namespace = "me.rerere.rikkahub"/namespace = "lustchat.lastchat.rikkafork.cocolal.plus"/' app/build.gradle.kts
+          
+          echo "✅ Package name modified"
+
+      - name: Build Plus Release (No Firebase, No Signing)
+        run: |
+          chmod +x gradlew
+          ./gradlew assemblePlusRelease --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: lustchat-cocolal
+          path: app/build/outputs/apk/plus/release/*.apk
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: app/build/outputs/apk/plus/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

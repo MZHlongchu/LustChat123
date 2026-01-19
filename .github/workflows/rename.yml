@@ -6,7 +6,6 @@ on:
       - "*zh*"
       - "*plus*"
       - "foss*"
-      - "cocolal*"
       - "[0-9]*"
 
 permissions:
@@ -29,153 +28,105 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Detect build configuration
-        id: config
+      - name: Detect flavor and build mode
+        id: flavor
         run: |
           set -euo pipefail
+
           TAG="${GITHUB_REF_NAME}"
-          TAG_LOWER="$(echo "$TAG" | tr '[:upper:]' '[:lower:]')"
-          
-          FLAVOR="plus"
-          BUILD_WITHOUT_FIREBASE="false"
-          RENAME_PACKAGE="false"
-          OLD_PACKAGE="me.rerere.rikkahub"
-          NEW_PACKAGE=""
-          ARTIFACT_NAME="release-apk-plus"
-          APK_PATH="app/build/outputs/apk/plus/release"
-          
-          if [[ "$TAG_LOWER" == "cocolal"* ]]; then
-            FLAVOR="plus"
-            BUILD_WITHOUT_FIREBASE="true"
-            RENAME_PACKAGE="true"
-            NEW_PACKAGE="lustchat.lastchat.rikkafork.cocolal.plus"
-            ARTIFACT_NAME="release-apk-plus-cocolal"
-          elif [[ "$TAG_LOWER" == "foss"* ]]; then
-            FLAVOR="plus"
-            BUILD_WITHOUT_FIREBASE="true"
-            ARTIFACT_NAME="release-apk-plus-foss"
+          TAG_LOWER="$(printf '%s' "$TAG" | tr '[:upper:]' '[:lower:]')"
+
+          # 检测是否为 FOSS 构建模式
+          if [[ "$TAG_LOWER" == "foss"* ]]; then
+            flavor="plus"  # 基于 plus flavor 构建
+            build_without_firebase="true"
+            echo "🌱 FOSS mode: Building plus flavor WITHOUT Firebase"
           elif [[ "$TAG_LOWER" == *"zh"* ]]; then
-            FLAVOR="zh"
-            ARTIFACT_NAME="release-apk-zh"
-            APK_PATH="app/build/outputs/apk/zh/release"
+            flavor="zh"
+            build_without_firebase="false"
           elif [[ "$TAG_LOWER" == *"plus"* ]]; then
-            FLAVOR="plus"
-            ARTIFACT_NAME="release-apk-plus"
+            flavor="plus"
+            build_without_firebase="false"
           else
-            FLAVOR="plus"
-            BUILD_WITHOUT_FIREBASE="true"
-            ARTIFACT_NAME="release-apk-plus-foss"
+            # 默认构建，不包含 google-services.json
+            flavor="plus"
+            build_without_firebase="true"
           fi
-          
-          echo "flavor=$FLAVOR" >> "$GITHUB_OUTPUT"
-          echo "build_without_firebase=$BUILD_WITHOUT_FIREBASE" >> "$GITHUB_OUTPUT"
-          echo "rename_package=$RENAME_PACKAGE" >> "$GITHUB_OUTPUT"
-          echo "old_package=$OLD_PACKAGE" >> "$GITHUB_OUTPUT"
-          echo "new_package=$NEW_PACKAGE" >> "$GITHUB_OUTPUT"
-          echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
-          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
 
-      - name: Rename package structure
-        if: steps.config.outputs.rename_package == 'true'
-        run: |
-          set -euo pipefail
-          
-          OLD_PKG="${{ steps.config.outputs.old_package }}"
-          NEW_PKG="${{ steps.config.outputs.new_package }}"
-          OLD_PATH=$(echo "$OLD_PKG" | tr '.' '/')
-          NEW_PATH=$(echo "$NEW_PKG" | tr '.' '/')
-          
-          echo "🔄 Renaming: $OLD_PKG → $NEW_PKG"
-          
-          # 1. 更新 build.gradle.kts
-          sed -i "s/namespace = \"$OLD_PKG\"/namespace = \"$NEW_PKG\"/" app/build.gradle.kts
-          
-          # 2. 更新 AndroidManifest.xml
-          sed -i "s/package=\"$OLD_PKG\"/package=\"$NEW_PKG\"/" app/src/main/AndroidManifest.xml
-          
-          # 3. 创建新目录并移动文件
-          mkdir -p "app/src/main/java/$NEW_PATH"
-          cp -r "app/src/main/java/$OLD_PATH"/* "app/src/main/java/$NEW_PATH/" 2>/dev/null || true
-          rm -rf "app/src/main/java/$OLD_PATH"
-          
-          # 4. 更新 package 声明
-          find "app/src/main/java/$NEW_PATH" -name "*.kt" -type f -exec sed -i "s/^package $OLD_PKG/package $NEW_PKG/" {} \;
-          
-          # 5. 全局替换 import
-          find app/src -name "*.kt" -type f -exec sed -i "s/import $OLD_PKG/import $NEW_PKG/g" {} \;
-          
-          # 6. 更新 XML 引用
-          find app/src -name "*.xml" -type f -exec sed -i "s/android:name=\"\.$OLD_PKG/android:name=\".$NEW_PKG/g" {} \;
-          find app/src -name "*.xml" -type f -exec sed -i "s/android:name=\"$OLD_PKG/android:name=\"$NEW_PKG/g" {} \;
-          
-          echo "✅ Package rename completed"
+          echo "flavor=$flavor" >> "$GITHUB_OUTPUT"
+          echo "build_without_firebase=$build_without_firebase" >> "$GITHUB_OUTPUT"
+          echo "Detected: flavor=$flavor, firebase_enabled=$build_without_firebase (tag: $TAG)"
 
-      - name: ⚠️ CRITICAL: Disable KSP incremental compilation
-        if: steps.config.outputs.rename_package == 'true'
-        run: |
-          # 禁用 KSP 增量编译以防止缓存污染
-          echo "ksp.incremental=false" >> local.properties
-          echo "ksp.incremental.log=true" >> local.properties
-          echo "✅ KSP incremental compilation DISABLED"
-
-      - name: ⚠️ CRITICAL: Clean all build caches
-        if: steps.config.outputs.rename_package == 'true'
-        run: |
-          echo "🧹 Cleaning EVERYTHING..."
-          rm -rf ~/.gradle/caches
-          rm -rf ~/.gradle/daemon
-          rm -rf app/build
-          rm -rf build
-          ./gradlew clean --no-daemon --rerun-tasks
-          echo "✅ All caches purged"
-
-      - name: Prepare Firebase config
+      - name: Prepare build files
         env:
           GOOGLE_SERVICES_JSON_B64_PLUS: ${{ secrets.GOOGLE_SERVICES_JSON_B64_PLUS }}
           GOOGLE_SERVICES_JSON_B64_ZH: ${{ secrets.GOOGLE_SERVICES_JSON_B64_ZH }}
         run: |
           set -euo pipefail
-          FLAVOR="${{ steps.config.outputs.flavor }}"
-          BUILD_WITHOUT_FIREBASE="${{ steps.config.outputs.build_without_firebase }}"
+
+          FLAVOR="${{ steps.flavor.outputs.flavor }}"
+          BUILD_WITHOUT_FIREBASE="${{ steps.flavor.outputs.build_without_firebase }}"
           
           mkdir -p "app/src/$FLAVOR"
-          
-          if [[ "$BUILD_WITHOUT_FIREBASE" == "true" ]]; then
-            echo "🌱 Building without Firebase"
-          elif [[ "$FLAVOR" == "plus" && -n "${GOOGLE_SERVICES_JSON_B64_PLUS:-}" ]]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON_B64_PLUS" | base64 -d > "app/src/plus/google-services.json"
-            echo "✅ Configured Firebase for plus flavor"
-          elif [[ "$FLAVOR" == "zh" && -n "${GOOGLE_SERVICES_JSON_B64_ZH:-}" ]]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON_B64_ZH" | base64 -d > "app/src/zh/google-services.json"
-            echo "✅ Configured Firebase for zh flavor"
+
+          # 仅在非 FOSS 模式且密钥存在时创建 google-services.json
+          if [[ "$BUILD_WITHOUT_FIREBASE" == "false" ]]; then
+            if [[ "$FLAVOR" == "plus" && -n "${GOOGLE_SERVICES_JSON_B64_PLUS:-}" ]]; then
+              printf '%s' "${GOOGLE_SERVICES_JSON_B64_PLUS}" | base64 -d > "app/src/plus/google-services.json"
+              test -s "app/src/plus/google-services.json"
+              echo "✅ Created google-services.json for plus flavor"
+            elif [[ "$FLAVOR" == "zh" && -n "${GOOGLE_SERVICES_JSON_B64_ZH:-}" ]]; then
+              printf '%s' "${GOOGLE_SERVICES_JSON_B64_ZH}" | base64 -d > "app/src/zh/google-services.json"
+              test -s "app/src/zh/google-services.json"
+              echo "✅ Created google-services.json for zh flavor"
+            else
+              echo "⚠️ No google-services.json provided - building without Firebase services"
+            fi
           else
-            echo "⚠️ No Firebase credentials, building without it"
+            echo "🌱 Skipping google-services.json creation (FOSS/no-firebase build)"
           fi
 
-      - name: Build APK
+          # 签名配置保持可选
+          if [ -n "${{ secrets.KEY_BASE64 }}" ]; then
+            echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+            echo "✅ Signing key configured"
+          else
+            echo "⚠️ No signing key provided, using debug signing"
+          fi
+
+          if [ -n "${{ secrets.SIGNING_CONFIG }}" ]; then
+            echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+            echo "✅ Signing config applied"
+          else
+            echo "⚠️ No signing config provided"
+          fi
+
+      - name: Gradle Build Release
         run: |
           set -euo pipefail
           chmod +x gradlew
-          
-          FLAVOR="${{ steps.config.outputs.flavor }}"
-          FLAVOR_CAP=$(echo "$FLAVOR" | sed 's/\b\w/\U&/')
-          
-          echo "📦 Building ${FLAVOR} flavor..."
-          ./gradlew "app:assemble${FLAVOR_CAP}Release" --no-daemon --stacktrace
 
-      - name: Upload artifacts
+          FLAVOR="${{ steps.flavor.outputs.flavor }}"
+          FLAVOR_CAP="${FLAVOR^}"
+          TASK="assemble${FLAVOR_CAP}Release"
+
+          echo "Building release APK ($TASK)..."
+          ./gradlew ":app:$TASK" --no-daemon --stacktrace
+
+      - name: Upload build output (artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.config.outputs.artifact_name }}
-          path: ${{ steps.config.outputs.apk_path }}
+          name: release-apk-${{ steps.flavor.outputs.flavor }}${{ steps.flavor.outputs.build_without_firebase == 'true' && '-foss' || '' }}
+          path: app/build/outputs/apk/${{ steps.flavor.outputs.flavor }}/release/*.apk
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           generate_release_notes: true
-          files: ${{ steps.config.outputs.apk_path }}/*.apk
+          files: |
+            app/build/outputs/apk/${{ steps.flavor.outputs.flavor }}/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

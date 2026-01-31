@@ -3,7 +3,7 @@ name: Android FOSS Build
 on:
   push:
     tags:
-      - "5foss*"
+      - "bfoss*"
 
 permissions:
   contents: write     

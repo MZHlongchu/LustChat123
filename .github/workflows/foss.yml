@@ -23,16 +23,15 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Change package to lustchat.123
+      ##### 修复：使用合法包名 lustchat.ll3（不能以数字开头）#####
+      - name: Change package to lustchat.ll3
         run: |
-          sed -i 's/applicationId = "lastchat.rikkafork.cocolal"/applicationId = "lustchat.123"/' app/build.gradle.kts
-          echo "✅ Package: lustchat.123"
+          sed -i 's/applicationId = "lastchat.rikkafork.cocolal"/applicationId = "lustchat.ll3"/' app/build.gradle.kts
+          echo "✅ Package: lustchat.ll3"
 
-      ##### 修复：使用正确的 ImageMagick 语法 #####
       - name: Generate launcher icon
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
-          
           mkdir -p app/src/main/res/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}
           
           for size in 48 72 96 144 192; do
@@ -44,24 +43,17 @@ jobs:
               192) dir="xxxhdpi" ;;
             esac
             
-            # 计算圆角参数
-            corner=$((size * 18 / 96))
-            
-            # 生成绿色圆角图标（正确语法：使用 -draw）
-            convert -size ${size}x${size} xc:none \
-              -fill "#4CAF50" \
-              -draw "roundrectangle 0,0 $((size-1)),$((size-1)) $corner,$corner" \
+            convert -size ${size}x${size} xc:"#4CAF50" \
               -fill white \
               -gravity center \
               -pointsize $((size/2)) \
-              -font DejaVu-Sans-Bold \
               -annotate +0+0 "LC" \
               app/src/main/res/mipmap-${dir}/ic_launcher.png
               
             cp app/src/main/res/mipmap-${dir}/ic_launcher.png app/src/main/res/mipmap-${dir}/ic_launcher_round.png
           done
           
-          echo "✅ Generated icons"
+          echo "✅ Icons generated"
 
       - name: Prepare signing
         run: |

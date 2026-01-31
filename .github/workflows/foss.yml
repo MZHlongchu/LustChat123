@@ -28,17 +28,14 @@ jobs:
           sed -i 's/applicationId = "lastchat.rikkafork.cocolal"/applicationId = "lustchat.123"/' app/build.gradle.kts
           echo "✅ Package: lustchat.123"
 
-      ##### 修复：直接用 ImageMagick 生成图标（无需 Base64）#####
+      ##### 修复：使用正确的 ImageMagick 语法 #####
       - name: Generate launcher icon
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
           
           mkdir -p app/src/main/res/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}
           
-          # 生成绿色圆角矩形图标（Material Design 风格）
-          # 你可以修改颜色 (#4CAF50 = 绿色) 和文字 (LC)
           for size in 48 72 96 144 192; do
-            dir=""
             case $size in
               48) dir="mdpi" ;;
               72) dir="hdpi" ;;
@@ -47,20 +44,24 @@ jobs:
               192) dir="xxxhdpi" ;;
             esac
             
-            # 生成图标：绿色背景 + 白色 LC 文字
-            convert -size ${size}x${size} xc:"#4CAF50" \
+            # 计算圆角参数
+            corner=$((size * 18 / 96))
+            
+            # 生成绿色圆角图标（正确语法：使用 -draw）
+            convert -size ${size}x${size} xc:none \
+              -fill "#4CAF50" \
+              -draw "roundrectangle 0,0 $((size-1)),$((size-1)) $corner,$corner" \
               -fill white \
               -gravity center \
               -pointsize $((size/2)) \
+              -font DejaVu-Sans-Bold \
               -annotate +0+0 "LC" \
-              -roundrectangle $((size*12/96)),$((size*12/96)) $((size-size*12/96)),$((size-size*12/96)) $((size*18/96)),$((size*18/96)) \
               app/src/main/res/mipmap-${dir}/ic_launcher.png
               
-            # 复制为圆形版本
             cp app/src/main/res/mipmap-${dir}/ic_launcher.png app/src/main/res/mipmap-${dir}/ic_launcher_round.png
           done
           
-          echo "✅ Generated icons (green LC logo)"
+          echo "✅ Generated icons"
 
       - name: Prepare signing
         run: |
@@ -85,3 +86,4 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

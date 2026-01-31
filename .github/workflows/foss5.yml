@@ -1,0 +1,130 @@
+name: Android FOSS Build
+
+on:
+  push:
+    tags:
+      - "5foss*"
+
+permissions:
+  contents: write     
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Change package to lustchat.ll3
+        run: |
+          sed -i 's/applicationId = "lastchat.rikkafork.cocolal"/applicationId = "lustchat.ll3"/' app/build.gradle.kts
+          echo "✅ Package: lustchat.ll3"
+
+      ##### 移除风险权限（显式声明的 + 依赖库注入的广告权限）#####
+      - name: Remove risky permissions
+        run: |
+          # 处理所有 AndroidManifest.xml（main + plus）
+          find app/src -name "AndroidManifest.xml" -type f | while read manifest; do
+            echo "Processing: $manifest"
+            
+            # 1. 删除显式声明的高危权限
+            sed -i '/android.permission.WRITE_SETTINGS/d' "$manifest"
+            sed -i '/android.permission.QUERY_ALL_PACKAGES/d' "$manifest"
+            sed -i '/android.permission.POST_PROMOTED_NOTIFICATIONS/d' "$manifest"
+            
+            # 2. 【关键】添加 tools:node="remove" 覆盖依赖库（Firebase/Google Play）注入的广告权限
+            # 在 </manifest> 标签前插入权限移除声明
+            if ! grep -q 'AD_ID.*tools:node="remove"' "$manifest"; then
+              sed -i '/<\/manifest>/i\
+  <!-- FOSS: Remove ad/tracking permissions injected by Google libraries -->\
+  <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />\
+  <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />\
+  <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />\
+  <uses-permission android:name="android.permission.ACCESS_ADSERVICES_TOPICS" tools:node="remove" />' "$manifest"
+              echo "✅ Injected remove-node for ad permissions"
+            fi
+            
+            echo "Final permissions in $manifest:"
+            grep -E "uses-permission" "$manifest" | head -15 || true
+          done
+
+      ##### 禁用自动更新检查 #####
+      - name: Disable auto-update
+        run: |
+          UPDATE_CHECKER="app/src/main/java/me/rerere/rikkahub/utils/UpdateChecker.kt"
+          if [ -f "$UPDATE_CHECKER" ]; then
+            # 将 GitHub API URL 改为无效地址，阻止更新检查
+            sed -i 's|https://api.github.com/repos/54xzh/LastChat/releases|https://disabled.in.foss.build/updates|' "$UPDATE_CHECKER"
+            echo "✅ Auto-update disabled"
+          fi
+
+      ##### 生成绿色 L 图标 #####
+      - name: Generate launcher icons
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
+          
+          for src_dir in "app/src/main" "app/src/plus"; do
+            mkdir -p "$src_dir/res/mipmap-"{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}
+            
+            for size in 48 72 96 144 192; do
+              case $size in
+                48) dir="mdpi" ;;
+                72) dir="hdpi" ;;
+                96) dir="xhdpi" ;;
+                144) dir="xxhdpi" ;;
+                192) dir="xxxhdpi" ;;
+              esac
+              
+              # 生成主图标（绿色背景 + 白色 L）
+              convert -size ${size}x${size} xc:"#4CAF50" \
+                -fill white \
+                -gravity center \
+                -pointsize $((size/2)) \
+                -annotate +0+0 "L" \
+                "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat.png"
+              
+              # 生成圆形版本
+              cp "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat.png" "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat_round.png"
+              
+              # 生成前景层
+              convert -size ${size}x${size} xc:none \
+                -fill "#4CAF50" \
+                -gravity center \
+                -pointsize $((size*2/3)) \
+                -annotate +0+0 "L" \
+                "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat_foreground.png"
+            done
+            echo "✅ Generated icons for $src_dir"
+          done
+
+      - name: Prepare signing
+        run: |
+          if [ -n "${{ secrets.KEY_BASE64 }}" ]; then
+            echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+            echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+            echo "✅ Release signing configured"
+          else
+            echo "ℹ️ Using debug signing"
+          fi
+
+      - name: Build FOSS APK
+        run: |
+          chmod +x gradlew
+          ./gradlew clean :app:assemblePlusRelease --no-daemon --rerun-tasks --stacktrace
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          files: app/build/outputs/apk/plus/release/*.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

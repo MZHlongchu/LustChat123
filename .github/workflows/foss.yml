@@ -26,38 +26,41 @@ jobs:
       - name: Change package to lustchat.123
         run: |
           sed -i 's/applicationId = "lastchat.rikkafork.cocolal"/applicationId = "lustchat.123"/' app/build.gradle.kts
-          grep "applicationId" app/build.gradle.kts | head -1
+          echo "✅ Package: lustchat.123"
 
-      ##### 使用内置 Base64 图标（96x96px 绿色 LC 图标）#####
-      - name: Generate launcher icons from Base64
+      ##### 修复：直接用 ImageMagick 生成图标（无需 Base64）#####
+      - name: Generate launcher icon
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
           
-          # 创建临时目录
-          mkdir -p /tmp/icon_src
-          
-          # Base64 编码的 PNG 图标（96x96 绿色背景白色 LC 文字）
-          # 你可以替换以下字符串为你自己的图标 Base64
-          ICON_BASE64="iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAABHNCSVQICAgIfAhkiAAAAElJREFUeJzt0EENwCAQwEAS9k9ZTgp4qJHw7J+Z2QO4T+3AfaofuE/1A/epfuA+1Q/cp/qB+1Q/cJ/qB+5T/cB9qh+4T/UD96l+4D7VD9yn+oH7VD9wn+oH7pvZBw5bB/7J4QAAAABJRU5ErkJggg=="
-          
-          # 解码为临时文件
-          echo "$ICON_BASE64" | base64 -d > /tmp/icon_src/logo.png
-          
-          # 创建 mipmap 目录并生成各分辨率
           mkdir -p app/src/main/res/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}
           
-          convert /tmp/icon_src/logo.png -resize 48x48 app/src/main/res/mipmap-mdpi/ic_launcher.png
-          convert /tmp/icon_src/logo.png -resize 72x72 app/src/main/res/mipmap-hdpi/ic_launcher.png
-          convert /tmp/icon_src/logo.png -resize 96x96 app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          convert /tmp/icon_src/logo.png -resize 144x144 app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          convert /tmp/icon_src/logo.png -resize 192x192 app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          
-          # 复制为圆形图标
-          for d in app/src/main/res/mipmap-*; do
-            cp "$d/ic_launcher.png" "$d/ic_launcher_round.png"
+          # 生成绿色圆角矩形图标（Material Design 风格）
+          # 你可以修改颜色 (#4CAF50 = 绿色) 和文字 (LC)
+          for size in 48 72 96 144 192; do
+            dir=""
+            case $size in
+              48) dir="mdpi" ;;
+              72) dir="hdpi" ;;
+              96) dir="xhdpi" ;;
+              144) dir="xxhdpi" ;;
+              192) dir="xxxhdpi" ;;
+            esac
+            
+            # 生成图标：绿色背景 + 白色 LC 文字
+            convert -size ${size}x${size} xc:"#4CAF50" \
+              -fill white \
+              -gravity center \
+              -pointsize $((size/2)) \
+              -annotate +0+0 "LC" \
+              -roundrectangle $((size*12/96)),$((size*12/96)) $((size-size*12/96)),$((size-size*12/96)) $((size*18/96)),$((size*18/96)) \
+              app/src/main/res/mipmap-${dir}/ic_launcher.png
+              
+            # 复制为圆形版本
+            cp app/src/main/res/mipmap-${dir}/ic_launcher.png app/src/main/res/mipmap-${dir}/ic_launcher_round.png
           done
           
-          echo "✅ Icons generated from Base64"
+          echo "✅ Generated icons (green LC logo)"
 
       - name: Prepare signing
         run: |

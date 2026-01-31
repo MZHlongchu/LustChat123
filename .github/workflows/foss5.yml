@@ -31,6 +31,15 @@ jobs:
       ##### 移除风险权限（显式声明的 + 依赖库注入的广告权限）#####
       - name: Remove risky permissions
         run: |
+          # 创建临时文件存放要插入的权限移除声明
+          cat > /tmp/foss_permissions.xml << 'EOF'
+          <!-- FOSS: Remove ad/tracking permissions injected by Google libraries -->
+          <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_TOPICS" tools:node="remove" />
+          EOF
+
           # 处理所有 AndroidManifest.xml（main + plus）
           find app/src -name "AndroidManifest.xml" -type f | while read manifest; do
             echo "Processing: $manifest"
@@ -40,15 +49,9 @@ jobs:
             sed -i '/android.permission.QUERY_ALL_PACKAGES/d' "$manifest"
             sed -i '/android.permission.POST_PROMOTED_NOTIFICATIONS/d' "$manifest"
             
-            # 2. 【关键】添加 tools:node="remove" 覆盖依赖库（Firebase/Google Play）注入的广告权限
-            # 在 </manifest> 标签前插入权限移除声明
+            # 2. 【关键】在 </manifest> 前插入权限移除声明（使用临时文件避免多行引号问题）
             if ! grep -q 'AD_ID.*tools:node="remove"' "$manifest"; then
-              sed -i '/<\/manifest>/i\
-  <!-- FOSS: Remove ad/tracking permissions injected by Google libraries -->\
-  <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />\
-  <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />\
-  <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />\
-  <uses-permission android:name="android.permission.ACCESS_ADSERVICES_TOPICS" tools:node="remove" />' "$manifest"
+              sed -i '/<\/manifest>/e cat /tmp/foss_permissions.xml' "$manifest"
               echo "✅ Injected remove-node for ad permissions"
             fi
             
@@ -64,9 +67,11 @@ jobs:
             # 将 GitHub API URL 改为无效地址，阻止更新检查
             sed -i 's|https://api.github.com/repos/54xzh/LastChat/releases|https://disabled.in.foss.build/updates|' "$UPDATE_CHECKER"
             echo "✅ Auto-update disabled"
+          else
+            echo "⚠️ UpdateChecker.kt not found"
           fi
 
-      ##### 生成绿色 LC 图标 #####
+      ##### 生成绿色 L 图标 #####
       - name: Generate launcher icons
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
@@ -83,7 +88,7 @@ jobs:
                 192) dir="xxxhdpi" ;;
               esac
               
-              # 生成主图标（绿色背景 + 白色 L）
+              # 生成主图标
               convert -size ${size}x${size} xc:"#4CAF50" \
                 -fill white \
                 -gravity center \
@@ -128,3 +133,4 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

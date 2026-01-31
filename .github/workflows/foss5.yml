@@ -3,7 +3,7 @@ name: Android FOSS Build
 on:
   push:
     tags:
-      - "bfoss*"
+      - "gfoss*"
 
 permissions:
   contents: write     
@@ -66,7 +66,7 @@ jobs:
             echo "✅ Auto-update disabled"
           fi
 
-      ##### 生成绿色 L 图标 #####
+      ##### 生成绿色 LC 图标 #####
       - name: Generate launcher icons
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick

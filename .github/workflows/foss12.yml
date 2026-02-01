@@ -1,0 +1,294 @@
+name: Android FOSS Build
+
+on:
+  push:
+    tags:
+      - "efoss*"
+
+permissions:
+  contents: write     
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Change package to lustchat.ll3
+        run: |
+          sed -i 's/applicationId = "lastchat.rikkafork.cocolal"/applicationId = "lustchat.ll3"/' app/build.gradle.kts
+          echo "✅ Package: lustchat.ll3"
+
+            ##### 修复：创建完整的 Firebase Stub 类（匹配实际 import 路径）#####
+      - name: Create Firebase stub classes
+        run: |
+          mkdir -p "app/src/main/java/com/google/firebase/analytics"
+          mkdir -p "app/src/main/java/com/google/firebase/remoteconfig"
+          mkdir -p "app/src/main/java/com/google/firebase/crashlytics"
+          mkdir -p "app/src/main/java/com/google/firebase"
+          mkdir -p "app/src/main/java/com/google/android/gms/tasks"
+          mkdir -p "app/src/main/java/com/google/common/cache"
+
+          # 1. FirebaseAnalytics 类 + 扩展属性（必须在同一包）
+          cat > "app/src/main/java/com/google/firebase/analytics/FirebaseAnalytics.kt" << 'EOF'
+          package com.google.firebase.analytics
+          import android.content.Context
+          import android.os.Bundle
+          import com.google.firebase.Firebase
+          
+          class FirebaseAnalytics private constructor() {
+              companion object {
+                  fun getInstance(): FirebaseAnalytics = FirebaseAnalytics()
+                  fun getInstance(context: Context): FirebaseAnalytics = FirebaseAnalytics()
+              }
+              fun logEvent(key: String, bundle: Bundle?) {}
+          }
+          
+          // 扩展属性：Firebase.analytics
+          val Firebase.analytics: FirebaseAnalytics
+              get() = FirebaseAnalytics.getInstance()
+          EOF
+
+          # 2. FirebaseRemoteConfig 类 + 扩展属性（必须在同一包）
+          cat > "app/src/main/java/com/google/firebase/remoteconfig/FirebaseRemoteConfig.kt" << 'EOF'
+          package com.google.firebase.remoteconfig
+          import com.google.android.gms.tasks.Task
+          import com.google.android.gms.tasks.Tasks
+          import com.google.firebase.Firebase
+          
+          class FirebaseRemoteConfig private constructor() {
+              companion object {
+                  fun getInstance(): FirebaseRemoteConfig = FirebaseRemoteConfig()
+              }
+              fun getString(key: String): String = ""
+              fun getLong(key: String): Long = 0L
+              fun getBoolean(key: String): Boolean = false
+              fun getDouble(key: String): Double = 0.0
+              fun setConfigSettingsAsync(settings: FirebaseRemoteConfigSettings): Task<Void> = Tasks.forResult(null)
+              fun setDefaultsAsync(defaults: Map<String, Any>): Task<Void> = Tasks.forResult(null)
+              fun setDefaultsAsync(resourceId: Int): Task<Void> = Tasks.forResult(null)
+              fun fetchAndActivate(): Task<Boolean> = Tasks.forResult(true)
+              fun activate(): Task<Boolean> = Tasks.forResult(true)
+              val all: Map<String, Any> = emptyMap()
+          }
+          
+          class FirebaseRemoteConfigSettings private constructor() {
+              class Builder {
+                  fun setMinimumFetchIntervalInSeconds(seconds: Long): Builder = this
+                  fun build(): FirebaseRemoteConfigSettings = FirebaseRemoteConfigSettings()
+              }
+          }
+          
+          fun remoteConfigSettings(block: FirebaseRemoteConfigSettings.Builder.() -> Unit): FirebaseRemoteConfigSettings {
+              return FirebaseRemoteConfigSettings.Builder().apply(block).build()
+          }
+          
+          // 扩展属性：Firebase.remoteConfig
+          val Firebase.remoteConfig: FirebaseRemoteConfig
+              get() = FirebaseRemoteConfig.getInstance()
+          EOF
+
+          # 3. FirebaseCrashlytics 类 + 扩展属性（必须在同一包）
+          cat > "app/src/main/java/com/google/firebase/crashlytics/FirebaseCrashlytics.kt" << 'EOF'
+          package com.google.firebase.crashlytics
+          import com.google.firebase.Firebase
+          
+          class FirebaseCrashlytics private constructor() {
+              companion object {
+                  fun getInstance(): FirebaseCrashlytics = FirebaseCrashlytics()
+              }
+              fun logException(e: Throwable) {}
+              fun log(msg: String) {}
+              fun setUserId(id: String) {}
+              fun setCustomKey(key: String, value: String) {}
+              fun setCustomKey(key: String, value: Boolean) {}
+              fun setCustomKey(key: String, value: Int) {}
+              fun setCustomKey(key: String, value: Double) {}
+              fun recordException(e: Throwable) {}
+          }
+          
+          // 扩展属性：Firebase.crashlytics
+          val Firebase.crashlytics: FirebaseCrashlytics
+              get() = FirebaseCrashlytics.getInstance()
+          EOF
+
+          # 4. FirebaseApp 和 Firebase 对象
+          cat > "app/src/main/java/com/google/firebase/FirebaseApp.kt" << 'EOF'
+          package com.google.firebase
+          import android.content.Context
+          
+          class FirebaseApp private constructor() {
+              companion object {
+                  fun getInstance(): FirebaseApp = FirebaseApp()
+                  fun getInstance(name: String): FirebaseApp = FirebaseApp()
+                  fun initializeApp(context: Context): FirebaseApp? = null
+                  fun initializeApp(context: Context, options: Any): FirebaseApp? = null
+              }
+          }
+          
+          object Firebase {
+              val app: FirebaseApp get() = FirebaseApp.getInstance()
+          }
+          EOF
+
+          # 5. Tasks 桩
+          cat > "app/src/main/java/com/google/android/gms/tasks/Tasks.kt" << 'EOF'
+          package com.google.android.gms.tasks
+          import java.util.concurrent.Executor
+          
+          interface Task<T> {
+              fun isSuccessful(): Boolean = true
+              fun getResult(): T? = null
+              fun getException(): Exception? = null
+              fun addOnSuccessListener(listener: OnSuccessListener<T>): Task<T> = this
+              fun addOnSuccessListener(executor: Executor, listener: OnSuccessListener<T>): Task<T> = this
+              fun addOnFailureListener(listener: OnFailureListener): Task<T> = this
+              fun addOnFailureListener(executor: Executor, listener: OnFailureListener): Task<T> = this
+              fun addOnCompleteListener(listener: OnCompleteListener<T>): Task<T> = this
+              fun addOnCompleteListener(executor: Executor, listener: OnCompleteListener<T>): Task<T> = this
+          }
+          
+          interface OnSuccessListener<T> {
+              fun onSuccess(result: T?)
+          }
+          
+          interface OnFailureListener {
+              fun onFailure(e: Exception)
+          }
+          
+          interface OnCompleteListener<T> {
+              fun onComplete(task: Task<T>)
+          }
+          
+          object Tasks {
+              fun <T> forResult(result: T?): Task<T> = object : Task<T> {
+                  override fun getResult(): T? = result
+                  override fun isSuccessful(): Boolean = true
+              }
+              fun <T> forException(e: Exception): Task<T> = object : Task<T> {
+                  override fun getException(): Exception? = e
+                  override fun isSuccessful(): Boolean = false
+              }
+          }
+          
+          suspend fun <T> Task<T>.await(): T? = getResult()
+          EOF
+
+          # 6. Guava CacheBuilder（泛型修复）
+          cat > "app/src/main/java/com/google/common/cache/CacheBuilder.kt" << 'EOF'
+          package com.google.common.cache
+          import java.util.concurrent.TimeUnit
+          
+          class CacheBuilder private constructor() {
+              companion object {
+                  @JvmStatic
+                  fun newBuilder(): CacheBuilder = CacheBuilder()
+              }
+              
+              fun maximumSize(maxSize: Long): CacheBuilder = this
+              fun expireAfterWrite(duration: Long, unit: TimeUnit): CacheBuilder = this
+              fun expireAfterAccess(duration: Long, unit: TimeUnit): CacheBuilder = this
+              
+              fun <K : Any, V : Any> build(): Cache<K, V> = SimpleCache()
+          }
+          
+          interface Cache<K, V> {
+              fun getIfPresent(key: K): V?
+              fun put(key: K, value: V)
+              fun invalidate(key: K)
+              fun invalidateAll()
+              fun size(): Long
+              fun cleanUp()
+              fun asMap(): Map<K, V>
+          }
+          
+          private class SimpleCache<K, V> : Cache<K, V> {
+              private val map = mutableMapOf<K, V>()
+              override fun getIfPresent(key: K): V? = map[key]
+              override fun put(key: K, value: V) { map[key] = value }
+              override fun invalidate(key: K) { map.remove(key) }
+              override fun invalidateAll() { map.clear() }
+              override fun size(): Long = map.size.toLong()
+              override fun cleanUp() {}
+              override fun asMap(): Map<K, V> = map.toMap()
+          }
+          EOF
+          
+          echo "✅ Created all Firebase/Guava stub classes"
+
+      ##### 移除 Firebase 依赖（实现 0 跟踪器）#####
+      - name: Remove Firebase tracking libraries
+        run: |
+          BUILD_FILE="app/build.gradle.kts"
+          sed -i '/platform(libs\.firebase\.bom)/d' "$BUILD_FILE"
+          sed -i '/implementation(libs\.firebase\.[^)]*)/d' "$BUILD_FILE"
+          echo "✅ Firebase dependencies removed"
+
+      ##### 以下保持完全不变 #####
+      - name: Remove risky permissions
+        run: |
+          cat > /tmp/foss_permissions.xml << 'EOF'
+          <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_TOPICS" tools:node="remove" />
+          EOF
+
+          find app/src -name "AndroidManifest.xml" -type f | while read manifest; do
+            sed -i '/android.permission.WRITE_SETTINGS/d' "$manifest"
+            sed -i '/android.permission.QUERY_ALL_PACKAGES/d' "$manifest"
+            sed -i '/android.permission.POST_PROMOTED_NOTIFICATIONS/d' "$manifest"
+            
+            if ! grep -q 'AD_ID.*tools:node="remove"' "$manifest"; then
+              sed -i '/<\/manifest>/e cat /tmp/foss_permissions.xml' "$manifest"
+            fi
+          done
+
+      - name: Disable auto-update
+        run: |
+          UPDATE_CHECKER="app/src/main/java/me/rerere/rikkahub/utils/UpdateChecker.kt"
+          if [ -f "$UPDATE_CHECKER" ]; then
+            sed -i 's|https://api.github.com/repos/54xzh/LastChat/releases|https://disabled.in.foss.build/updates|' "$UPDATE_CHECKER"
+          fi
+
+      - name: Generate launcher icons
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
+          
+          for src_dir in "app/src/main" "app/src/plus"; do
+            mkdir -p "$src_dir/res/mipmap-"{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}
+            for size in 48 72 96 144 192; do
+              case $size in 48) dir="mdpi" ;; 72) dir="hdpi" ;; 96) dir="xhdpi" ;; 144) dir="xxhdpi" ;; 192) dir="xxxhdpi" ;; esac
+              convert -size ${size}x${size} xc:"#4CAF50" -fill white -gravity center -pointsize $((size/2)) -annotate +0+0 "L" "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat.png"
+              cp "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat.png" "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat_round.png"
+              convert -size ${size}x${size} xc:none -fill "#4CAF50" -gravity center -pointsize $((size*2/3)) -annotate +0+0 "L" "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat_foreground.png"
+            done
+          done
+
+      - name: Prepare signing and build
+        run: |
+          if [ -n "${{ secrets.KEY_BASE64 }}" ]; then
+            echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+            echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+          fi
+          chmod +x gradlew
+          ./gradlew clean :app:assemblePlusRelease --no-daemon --rerun-tasks --stacktrace
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          files: app/build/outputs/apk/plus/release/*.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

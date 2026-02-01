@@ -1,0 +1,193 @@
+name: Android FOSS Build
+
+on:
+  push:
+    tags:
+      - "kfoss*"
+
+permissions:
+  contents: write     
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Change package to lustchat.ll3
+        run: |
+          sed -i 's/applicationId = "lastchat.rikkafork.cocolal"/applicationId = "lustchat.ll3"/' app/build.gradle.kts
+          echo "✅ Package: lustchat.ll3"
+
+      ##### 【新增】创建 Firebase 空桩类（让编译器找到类，但无真实代码）#####
+      - name: Create Firebase stub classes
+        run: |
+          STUB_DIR="app/src/main/java/com/google/firebase"
+          mkdir -p "$STUB_DIR/analytics" "$STUB_DIR/remoteconfig" "$STUB_DIR/crashlytics"
+          
+          # 1. FirebaseAnalytics 桩
+          cat > "$STUB_DIR/analytics/FirebaseAnalytics.kt" << 'EOF'
+          package com.google.firebase.analytics
+          import android.content.Context
+          import android.os.Bundle
+          
+          class FirebaseAnalytics private constructor() {
+              companion object {
+                  fun getInstance(context: Context): FirebaseAnalytics? = null
+                  @JvmStatic fun getInstance(): FirebaseAnalytics? = null
+              }
+              fun logEvent(key: String, bundle: Bundle?) {}
+          }
+          EOF
+          
+          # 2. FirebaseRemoteConfig 桩
+          cat > "$STUB_DIR/remoteconfig/FirebaseRemoteConfig.kt" << 'EOF'
+          package com.google.firebase.remoteconfig
+          
+          class FirebaseRemoteConfig private constructor() {
+              companion object {
+                  fun getInstance(): FirebaseRemoteConfig = FirebaseRemoteConfig()
+              }
+              fun getString(key: String): String = ""
+              fun fetchAndActivate(): com.google.android.gms.tasks.Task<Boolean> = 
+                  com.google.android.gms.tasks.Tasks.forResult(true)
+          }
+          EOF
+          
+          # 3. FirebaseCrashlytics 桩
+          cat > "$STUB_DIR/crashlytics/FirebaseCrashlytics.kt" << 'EOF'
+          package com.google.firebase.crashlytics
+          
+          class FirebaseCrashlytics private constructor() {
+              companion object {
+                  fun getInstance(): FirebaseCrashlytics = FirebaseCrashlytics()
+              }
+              fun logException(e: Throwable) {}
+              fun log(msg: String) {}
+              fun setUserId(id: String) {}
+          }
+          EOF
+          
+          echo "✅ Created Firebase stub classes"
+
+      ##### 【新增】移除 Firebase 依赖（实现 0 跟踪器）#####
+      - name: Remove Firebase tracking libraries
+        run: |
+          BUILD_FILE="app/build.gradle.kts"
+          
+          echo "Removing Firebase tracking libraries..."
+          
+          # 移除 Firebase BOM 平台
+          sed -i '/platform(libs\.firebase\.bom)/d' "$BUILD_FILE"
+          
+          # 移除所有 Firebase 实现（analytics, crashlytics, config）
+          sed -i '/implementation(libs\.firebase\.[^)]*)/d' "$BUILD_FILE"
+          
+          echo "✅ Firebase dependencies removed"
+          echo "--- Remaining Firebase dependencies (should be empty) ---"
+          grep -n "firebase" "$BUILD_FILE" || echo "None found (clean)"
+
+      ##### 以下完全保持你成功的版本不变 #####
+      - name: Remove risky permissions
+        run: |
+          cat > /tmp/foss_permissions.xml << 'EOF'
+          <!-- FOSS: Remove ad/tracking permissions injected by Google libraries -->
+          <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_TOPICS" tools:node="remove" />
+          EOF
+
+          find app/src -name "AndroidManifest.xml" -type f | while read manifest; do
+            echo "Processing: $manifest"
+            
+            sed -i '/android.permission.WRITE_SETTINGS/d' "$manifest"
+            sed -i '/android.permission.QUERY_ALL_PACKAGES/d' "$manifest"
+            sed -i '/android.permission.POST_PROMOTED_NOTIFICATIONS/d' "$manifest"
+            
+            if ! grep -q 'AD_ID.*tools:node="remove"' "$manifest"; then
+              sed -i '/<\/manifest>/e cat /tmp/foss_permissions.xml' "$manifest"
+              echo "✅ Injected remove-node for ad permissions"
+            fi
+            
+            echo "Final permissions in $manifest:"
+            grep -E "uses-permission" "$manifest" | head -15 || true
+          done
+
+      - name: Disable auto-update
+        run: |
+          UPDATE_CHECKER="app/src/main/java/me/rerere/rikkahub/utils/UpdateChecker.kt"
+          if [ -f "$UPDATE_CHECKER" ]; then
+            sed -i 's|https://api.github.com/repos/54xzh/LastChat/releases|https://disabled.in.foss.build/updates|' "$UPDATE_CHECKER"
+            echo "✅ Auto-update disabled"
+          else
+            echo "⚠️ UpdateChecker.kt not found, skipping"
+          fi
+
+      - name: Generate launcher icons
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
+          
+          for src_dir in "app/src/main" "app/src/plus"; do
+            mkdir -p "$src_dir/res/mipmap-"{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}
+            
+            for size in 48 72 96 144 192; do
+              case $size in
+                48) dir="mdpi" ;;
+                72) dir="hdpi" ;;
+                96) dir="xhdpi" ;;
+                144) dir="xxhdpi" ;;
+                192) dir="xxxhdpi" ;;
+              esac
+              
+              convert -size ${size}x${size} xc:"#4CAF50" \
+                -fill white \
+                -gravity center \
+                -pointsize $((size/2)) \
+                -annotate +0+0 "L" \
+                "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat.png"
+              
+              cp "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat.png" "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat_round.png"
+              
+              convert -size ${size}x${size} xc:none \
+                -fill "#4CAF50" \
+                -gravity center \
+                -pointsize $((size*2/3)) \
+                -annotate +0+0 "L" \
+                "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat_foreground.png"
+            done
+            echo "✅ Generated icons for $src_dir"
+          done
+
+      - name: Prepare signing
+        run: |
+          if [ -n "${{ secrets.KEY_BASE64 }}" ]; then
+            echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+            echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+            echo "✅ Release signing configured"
+          else
+            echo "ℹ️ Using debug signing"
+          fi
+
+      - name: Build FOSS APK
+        run: |
+          chmod +x gradlew
+          ./gradlew clean :app:assemblePlusRelease --no-daemon --rerun-tasks --stacktrace
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          files: app/build/outputs/apk/plus/release/*.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

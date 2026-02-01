@@ -1,0 +1,164 @@
+name: Android FOSS Build
+
+on:
+  push:
+    tags:
+      - "lfoss*"
+
+permissions:
+  contents: write     
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Change package to lustchat.ll3
+        run: |
+          sed -i 's/applicationId = "lastchat.rikkafork.cocolal"/applicationId = "lustchat.ll3"/' app/build.gradle.kts
+          echo "✅ Package: lustchat.ll3"
+
+      ##### 1. 移除 Firebase 依赖（TrackerControl 显示 0 的关键）#####
+      - name: Remove Firebase tracking libraries
+        run: |
+          BUILD_FILE="app/build.gradle.kts"
+          
+          # 移除 Firebase BOM 平台
+          sed -i '/platform(libs\.firebase\.bom)/d' "$BUILD_FILE"
+          
+          # 移除所有 Firebase 实现（analytics, crashlytics, config）
+          sed -i '/implementation(libs\.firebase\.[^)]*)/d' "$BUILD_FILE"
+          
+          echo "✅ Firebase dependencies removed"
+          grep -n "firebase" "$BUILD_FILE" || echo "No firebase references remaining"
+
+      ##### 2. 【新增】自动兼容：注释/替换源码中的 Firebase 调用（防止崩溃）#####
+      - name: Stub Firebase API calls in source code
+        run: |
+          echo "Scanning source files for Firebase API calls..."
+          
+          # 处理所有 Kotlin 和 Java 文件
+          find app/src -type f \( -name "*.kt" -o -name "*.java" \) | while read file; do
+            # 检查是否包含 Firebase 引用
+            if grep -qE "FirebaseAnalytics|FirebaseCrashlytics|FirebaseRemoteConfig|import.*firebase" "$file"; then
+              echo "Stubbing: $file"
+              
+              # 将 Firebase 实例获取替换为 null（避免初始化崩溃）
+              # 示例：val analytics = FirebaseAnalytics.getInstance(context) → val analytics = null /* FOSS */
+              sed -i 's/FirebaseAnalytics\.getInstance([^)]*)/null \/* FOSS: removed Firebase *\//g' "$file" || true
+              sed -i 's/FirebaseCrashlytics\.getInstance()/null \/* FOSS: removed Firebase *\//g' "$file" || true
+              sed -i 's/FirebaseRemoteConfig\.getInstance()/null \/* FOSS: removed Firebase *\//g' "$file" || true
+              
+              # 注释掉 Firebase import 语句（防止编译错误）
+              sed -i 's/^import com\.google\.firebase\./\/\/ import com.google.firebase./g' "$file" || true
+            fi
+          done
+          
+          echo "✅ Firebase API calls stubbed"
+
+      ##### 3. 移除风险权限（完整保留）#####
+      - name: Remove risky permissions
+        run: |
+          cat > /tmp/foss_permissions.xml << 'EOF'
+          <!-- FOSS: Remove ad/tracking permissions injected by Google libraries -->
+          <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_TOPICS" tools:node="remove" />
+          EOF
+
+          find app/src -name "AndroidManifest.xml" -type f | while read manifest; do
+            echo "Processing: $manifest"
+            
+            sed -i '/android.permission.WRITE_SETTINGS/d' "$manifest"
+            sed -i '/android.permission.QUERY_ALL_PACKAGES/d' "$manifest"
+            sed -i '/android.permission.POST_PROMOTED_NOTIFICATIONS/d' "$manifest"
+            
+            if ! grep -q 'AD_ID.*tools:node="remove"' "$manifest"; then
+              sed -i '/<\/manifest>/e cat /tmp/foss_permissions.xml' "$manifest"
+              echo "✅ Injected remove-node for ad permissions"
+            fi
+          done
+
+      ##### 4. 禁用自动更新（保留）#####
+      - name: Disable auto-update
+        run: |
+          UPDATE_CHECKER="app/src/main/java/me/rerere/rikkahub/utils/UpdateChecker.kt"
+          if [ -f "$UPDATE_CHECKER" ]; then
+            sed -i 's|https://api.github.com/repos/54xzh/LastChat/releases|https://disabled.in.foss.build/updates|' "$UPDATE_CHECKER"
+            echo "✅ Auto-update disabled"
+          fi
+
+      ##### 5. 生成绿色 L 图标（完整保留）#####
+      - name: Generate launcher icons
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
+          
+          for src_dir in "app/src/main" "app/src/plus"; do
+            mkdir -p "$src_dir/res/mipmap-"{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}
+            
+            for size in 48 72 96 144 192; do
+              case $size in
+                48) dir="mdpi" ;;
+                72) dir="hdpi" ;;
+                96) dir="xhdpi" ;;
+                144) dir="xxhdpi" ;;
+                192) dir="xxxhdpi" ;;
+              esac
+              
+              convert -size ${size}x${size} xc:"#4CAF50" \
+                -fill white \
+                -gravity center \
+                -pointsize $((size/2)) \
+                -annotate +0+0 "L" \
+                "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat.png"
+              
+              cp "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat.png" "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat_round.png"
+              
+              convert -size ${size}x${size} xc:none \
+                -fill "#4CAF50" \
+                -gravity center \
+                -pointsize $((size*2/3)) \
+                -annotate +0+0 "L" \
+                "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat_foreground.png"
+            done
+            echo "✅ Generated icons for $src_dir"
+          done
+
+      ##### 6. 签名配置（保留）#####
+      - name: Prepare signing
+        run: |
+          if [ -n "${{ secrets.KEY_BASE64 }}" ]; then
+            echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+            echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+            echo "✅ Release signing configured"
+          else
+            echo "ℹ️ Using debug signing"
+          fi
+
+      ##### 7. 构建（保留）#####
+      - name: Build FOSS APK
+        run: |
+          chmod +x gradlew
+          ./gradlew clean :app:assemblePlusRelease --no-daemon --rerun-tasks --stacktrace
+
+      ##### 8. 发布（保留）#####
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          files: app/build/outputs/apk/plus/release/*.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

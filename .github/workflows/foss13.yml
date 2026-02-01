@@ -28,14 +28,13 @@ jobs:
           sed -i 's/applicationId = "lastchat.rikkafork.cocolal"/applicationId = "lustchat.ll3"/' app/build.gradle.kts
           echo "✅ Package: lustchat.ll3"
 
-      ##### 修复：创建完整的 Firebase Stub 类（添加 Builder 属性）#####
+      ##### 修复：创建完整的 Firebase Stub 类（删除冲突的 Tasks stub）#####
       - name: Create Firebase stub classes
         run: |
           mkdir -p "app/src/main/java/com/google/firebase/analytics"
           mkdir -p "app/src/main/java/com/google/firebase/remoteconfig"
           mkdir -p "app/src/main/java/com/google/firebase/crashlytics"
           mkdir -p "app/src/main/java/com/google/firebase"
-          mkdir -p "app/src/main/java/com/google/android/gms/tasks"
           mkdir -p "app/src/main/java/com/google/common/cache"
 
           # 1. FirebaseAnalytics 类 + 扩展属性
@@ -57,7 +56,7 @@ jobs:
               get() = FirebaseAnalytics.getInstance()
           EOF
 
-          # 2. FirebaseRemoteConfig 类（关键修复：Builder 添加 var 属性）
+          # 2. FirebaseRemoteConfig 类（直接使用真实的 play-services-tasks）
           cat > "app/src/main/java/com/google/firebase/remoteconfig/FirebaseRemoteConfig.kt" << 'EOF'
           package com.google.firebase.remoteconfig
           import com.google.android.gms.tasks.Task
@@ -82,7 +81,6 @@ jobs:
           
           class FirebaseRemoteConfigSettings private constructor() {
               class Builder {
-                  // 关键修复：必须提供 var 属性供 KTX 赋值
                   var minimumFetchIntervalInSeconds: Long = 3600
                   var fetchTimeoutInSeconds: Long = 60
                   
@@ -145,49 +143,8 @@ jobs:
           }
           EOF
 
-          # 5. Tasks 桩
-          mkdir -p "app/src/main/java/com/google/android/gms/tasks"
-          cat > "app/src/main/java/com/google/android/gms/tasks/Tasks.kt" << 'EOF'
-          package com.google.android.gms.tasks
-          import java.util.concurrent.Executor
-          
-          interface Task<T> {
-              fun isSuccessful(): Boolean = true
-              fun getResult(): T? = null
-              fun getException(): Exception? = null
-              fun addOnSuccessListener(listener: OnSuccessListener<T>): Task<T> = this
-              fun addOnSuccessListener(executor: Executor, listener: OnSuccessListener<T>): Task<T> = this
-              fun addOnFailureListener(listener: OnFailureListener): Task<T> = this
-              fun addOnFailureListener(executor: Executor, listener: OnFailureListener): Task<T> = this
-              fun addOnCompleteListener(listener: OnCompleteListener<T>): Task<T> = this
-              fun addOnCompleteListener(executor: Executor, listener: OnCompleteListener<T>): Task<T> = this
-          }
-          
-          interface OnSuccessListener<T> {
-              fun onSuccess(result: T?)
-          }
-          
-          interface OnFailureListener {
-              fun onFailure(e: Exception)
-          }
-          
-          interface OnCompleteListener<T> {
-              fun onComplete(task: Task<T>)
-          }
-          
-          object Tasks {
-              fun <T> forResult(result: T?): Task<T> = object : Task<T> {
-                  override fun getResult(): T? = result
-                  override fun isSuccessful(): Boolean = true
-              }
-              fun <T> forException(e: Exception): Task<T> = object : Task<T> {
-                  override fun getException(): Exception? = e
-                  override fun isSuccessful(): Boolean = false
-              }
-          }
-          
-          suspend fun <T> Task<T>.await(): T? = getResult()
-          EOF
+          # 5. [已删除] 不再创建 Tasks.kt，因为 play-services-tasks-18.2.0 库仍然存在
+          # 直接使用库中真实的 com.google.android.gms.tasks.Tasks 类
 
           # 6. Guava CacheBuilder
           mkdir -p "app/src/main/java/com/google/common/cache"
@@ -231,7 +188,6 @@ jobs:
           EOF
           
           echo "✅ Created all Firebase/Guava stub classes"
-
 
       ##### 移除 Firebase 依赖（实现 0 跟踪器）#####
       - name: Remove Firebase tracking libraries
@@ -299,4 +255,3 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

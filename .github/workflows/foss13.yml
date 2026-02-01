@@ -35,7 +35,7 @@ jobs:
           mkdir -p "app/src/main/java/com/google/firebase/remoteconfig"
           mkdir -p "app/src/main/java/com/google/firebase/crashlytics"
           mkdir -p "app/src/main/java/com/google/firebase"
-          mkdir -p "app/src/main/java/com/google/common/cache"
+          ##### 已删除: mkdir -p "app/src/main/java/com/google/common/cache" #####
 
           # 1. FirebaseAnalytics 类 + 扩展属性
           cat > "app/src/main/java/com/google/firebase/analytics/FirebaseAnalytics.kt" << 'EOF'
@@ -146,48 +146,11 @@ jobs:
           # 5. [已删除] 不再创建 Tasks.kt，因为 play-services-tasks-18.2.0 库仍然存在
           # 直接使用库中真实的 com.google.android.gms.tasks.Tasks 类
 
-          # 6. Guava CacheBuilder
-          mkdir -p "app/src/main/java/com/google/common/cache"
-          cat > "app/src/main/java/com/google/common/cache/CacheBuilder.kt" << 'EOF'
-          package com.google.common.cache
-          import java.util.concurrent.TimeUnit
-          
-          class CacheBuilder private constructor() {
-              companion object {
-                  @JvmStatic
-                  fun newBuilder(): CacheBuilder = CacheBuilder()
-              }
-              
-              fun maximumSize(maxSize: Long): CacheBuilder = this
-              fun expireAfterWrite(duration: Long, unit: TimeUnit): CacheBuilder = this
-              fun expireAfterAccess(duration: Long, unit: TimeUnit): CacheBuilder = this
-              
-              fun <K : Any, V : Any> build(): Cache<K, V> = SimpleCache()
-          }
-          
-          interface Cache<K, V> {
-              fun getIfPresent(key: K): V?
-              fun put(key: K, value: V)
-              fun invalidate(key: K)
-              fun invalidateAll()
-              fun size(): Long
-              fun cleanUp()
-              fun asMap(): Map<K, V>
-          }
-          
-          private class SimpleCache<K, V> : Cache<K, V> {
-              private val map = mutableMapOf<K, V>()
-              override fun getIfPresent(key: K): V? = map[key]
-              override fun put(key: K, value: V) { map[key] = value }
-              override fun invalidate(key: K) { map.remove(key) }
-              override fun invalidateAll() { map.clear() }
-              override fun size(): Long = map.size.toLong()
-              override fun cleanUp() {}
-              override fun asMap(): Map<K, V> = map.toMap()
-          }
-          EOF
+          ##### 已删除第 6 部分（Guava CacheBuilder stub）#####
+          # 原因：项目已通过传递依赖引入 guava-33.3.1-android，与手动创建的 stub 冲突
           
           echo "✅ Created all Firebase/Guava stub classes"
+        ##### 以上为 Create Firebase stub classes 步骤的结束 #####
 
       ##### 移除 Firebase 依赖（实现 0 跟踪器）#####
       - name: Remove Firebase tracking libraries

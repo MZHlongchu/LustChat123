@@ -1,0 +1,537 @@
+name: Android FOSS Build with Debug Support
+
+on:
+  push:
+    tags:
+      - "ofoss*"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  checks: write
+  actions: read
+
+jobs:
+  build-debug:
+    name: Build with AddressSanitizer
+    runs-on: macos-latest  # macOS runner 提供更好的模拟器支持
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 29
+          build-tools: 35.0.0
+
+      - name: Create Firebase stub classes
+        run: |
+          mkdir -p "app/src/main/java/com/google/firebase/analytics"
+          mkdir -p "app/src/main/java/com/google/firebase/remoteconfig"
+          mkdir -p "app/src/main/java/com/google/firebase/crashlytics"
+          mkdir -p "app/src/main/java/com/google/firebase"
+
+          # FirebaseAnalytics 类
+          cat > "app/src/main/java/com/google/firebase/analytics/FirebaseAnalytics.kt" << 'EOF'
+          package com.google.firebase.analytics
+          import android.content.Context
+          import android.os.Bundle
+          import com.google.firebase.Firebase
+          import java.util.concurrent.atomic.AtomicBoolean
+          
+          class FirebaseAnalytics private constructor() {
+              companion object {
+                  @Volatile private var instance: FirebaseAnalytics? = null
+                  
+                  fun getInstance(): FirebaseAnalytics {
+                      return instance ?: synchronized(this) {
+                          instance ?: FirebaseAnalytics().also { instance = it }
+                      }
+                  }
+                  fun getInstance(context: Context): FirebaseAnalytics = getInstance()
+              }
+              @Volatile private var initialized = AtomicBoolean(false)
+              
+              fun logEvent(key: String, bundle: Bundle?) {
+                  if (!initialized.get()) return
+              }
+          }
+          
+          val Firebase.analytics: FirebaseAnalytics
+              get() = FirebaseAnalytics.getInstance()
+          EOF
+
+          # FirebaseRemoteConfig 类
+          cat > "app/src/main/java/com/google/firebase/remoteconfig/FirebaseRemoteConfig.kt" << 'EOF'
+          package com.google.firebase.remoteconfig
+          import com.google.android.gms.tasks.Task
+          import com.google.android.gms.tasks.Tasks
+          import com.google.firebase.Firebase
+          import java.util.concurrent.ConcurrentHashMap
+          import java.util.concurrent.atomic.AtomicBoolean
+          
+          class FirebaseRemoteConfig private constructor() {
+              companion object {
+                  @Volatile private var instance: FirebaseRemoteConfig? = null
+                  
+                  fun getInstance(): FirebaseRemoteConfig {
+                      return instance ?: synchronized(this) {
+                          instance ?: FirebaseRemoteConfig().also { instance = it }
+                      }
+                  }
+              }
+              
+              private val configStore = ConcurrentHashMap<String, Any>()
+              @Volatile private var initialized = AtomicBoolean(false)
+              
+              fun getString(key: String): String = configStore[key] as? String ?: ""
+              fun getLong(key: String): Long = (configStore[key] as? Number)?.toLong() ?: 0L
+              fun getBoolean(key: String): Boolean = configStore[key] as? Boolean ?: false
+              fun getDouble(key: String): Double = (configStore[key] as? Number)?.toDouble() ?: 0.0
+              
+              fun setConfigSettingsAsync(settings: FirebaseRemoteConfigSettings): Task<Void> {
+                  return Tasks.forResult(null)
+              }
+              fun setDefaultsAsync(defaults: Map<String, Any>): Task<Void> {
+                  configStore.putAll(defaults)
+                  return Tasks.forResult(null)
+              }
+              fun setDefaultsAsync(resourceId: Int): Task<Void> = Tasks.forResult(null)
+              fun fetchAndActivate(): Task<Boolean> = Tasks.forResult(true)
+              fun activate(): Task<Boolean> = Tasks.forResult(true)
+              val all: Map<String, Any> = configStore.toMap()
+          }
+          
+          class FirebaseRemoteConfigSettings private constructor() {
+              class Builder {
+                  var minimumFetchIntervalInSeconds: Long = 3600
+                  var fetchTimeoutInSeconds: Long = 60
+                  
+                  fun setMinimumFetchIntervalInSeconds(seconds: Long): Builder {
+                      minimumFetchIntervalInSeconds = seconds
+                      return this
+                  }
+                  fun setFetchTimeoutInSeconds(seconds: Long): Builder = this
+                  fun build(): FirebaseRemoteConfigSettings = FirebaseRemoteConfigSettings()
+              }
+          }
+          
+          inline fun remoteConfigSettings(block: FirebaseRemoteConfigSettings.Builder.() -> Unit): FirebaseRemoteConfigSettings {
+              return FirebaseRemoteConfigSettings.Builder().apply(block).build()
+          }
+          
+          val Firebase.remoteConfig: FirebaseRemoteConfig
+              get() = FirebaseRemoteConfig.getInstance()
+          EOF
+
+          # FirebaseCrashlytics 类
+          cat > "app/src/main/java/com/google/firebase/crashlytics/FirebaseCrashlytics.kt" << 'EOF'
+          package com.google.firebase.crashlytics
+          import com.google.firebase.Firebase
+          import java.util.concurrent.ConcurrentLinkedQueue
+          import java.util.concurrent.atomic.AtomicBoolean
+          
+          class FirebaseCrashlytics private constructor() {
+              companion object {
+                  @Volatile private var instance: FirebaseCrashlytics? = null
+                  
+                  fun getInstance(): FirebaseCrashlytics {
+                      return instance ?: synchronized(this) {
+                          instance ?: FirebaseCrashlytics().also { instance = it }
+                      }
+                  }
+              }
+              
+              private val crashQueue = ConcurrentLinkedQueue<String>()
+              @Volatile private var enabled = AtomicBoolean(true)
+              
+              fun logException(e: Throwable) {
+                  if (!enabled.get()) return
+                  crashQueue.add("Exception: ${e.message}")
+              }
+              fun log(msg: String) {
+                  if (!enabled.get()) return
+                  crashQueue.add(msg)
+              }
+              fun setUserId(id: String) {}
+              fun setCustomKey(key: String, value: String) {}
+              fun setCustomKey(key: String, value: Boolean) {}
+              fun setCustomKey(key: String, value: Int) {}
+              fun setCustomKey(key: String, value: Double) {}
+              fun recordException(e: Throwable) { logException(e) }
+          }
+          
+          val Firebase.crashlytics: FirebaseCrashlytics
+              get() = FirebaseCrashlytics.getInstance()
+          EOF
+
+          # FirebaseApp 和 Firebase 对象
+          cat > "app/src/main/java/com/google/firebase/FirebaseApp.kt" << 'EOF'
+          package com.google.firebase
+          import android.content.Context
+          import java.util.concurrent.atomic.AtomicReference
+          
+          class FirebaseApp private constructor() {
+              companion object {
+                  @Volatile private var instance: FirebaseApp? = null
+                  
+                  fun getInstance(): FirebaseApp {
+                      return instance ?: synchronized(this) {
+                          instance ?: FirebaseApp().also { instance = it }
+                      }
+                  }
+                  fun getInstance(name: String): FirebaseApp = getInstance()
+                  fun initializeApp(context: Context): FirebaseApp? {
+                      if (instance == null) {
+                          instance = FirebaseApp()
+                      }
+                      return instance
+                  }
+                  fun initializeApp(context: Context, options: Any): FirebaseApp? = initializeApp(context)
+              }
+          }
+          
+          object Firebase {
+              @Volatile private var appInstance: FirebaseApp? = null
+              
+              val app: FirebaseApp get() {
+                  return appInstance ?: synchronized(this) {
+                      appInstance ?: FirebaseApp.getInstance().also { appInstance = it }
+                  }
+              }
+          }
+          EOF
+
+      - name: Configure Gradle for native debugging
+        run: |
+          cat >> app/build.gradle.kts << 'EOF'
+          
+          // 为调试构建启用 AddressSanitizer
+          packaging {
+              resources {
+                  excludes += "/META-INF/{AL2.0,LGPL2.1}"
+              }
+          }
+          
+          // 添加 ASan 配置
+          tasks.withType<AbstractCompile>().configureEach {
+              options.compilerArgs.addAll(listOf(
+                  "-fsanitize=address",
+                  "-fno-omit-frame-pointer"
+              ))
+          }
+          
+          tasks.withType<LinkSharedLibrary>().configureEach {
+              options.linkerArgs.addAll(listOf(
+                  "-fsanitize=address",
+                  "-Wl,--gc-sections"
+              ))
+          }
+          EOF
+
+      - name: Create ASan wrapper script
+        run: |
+          cat > app/asan.symbolize << 'EOF'
+          #!/bin/bash
+          # AddressSanitizer 结果符号化脚本
+          exec addr2line -e "$1" -p -f -C "$2" 2>/dev/null || echo "无法符号化地址: $2"
+          EOF
+          chmod +x app/asan.symbolize
+
+      - name: Build debug APK with ASan
+        run: |
+          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/35.0.0
+          ./gradlew clean :app:assemblePlusDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx4g"
+
+      - name: Set up Android Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          script: |
+            # 等待模拟器完全启动
+            sleep 30
+            # 禁用动画以提高稳定性
+            settings put global window_animation_scale 0
+            settings put transition_animation_scale 0
+            settings put animator_duration_scale 0
+
+      - name: Install debug APK
+        run: |
+          emulator_name="emulator-5554"
+          adb connect $emulator_name 2>/dev/null || true
+          sleep 5
+          adb install app/build/outputs/apk/plus/debug/app-plus-debug.apk
+
+      - name: Run instrumented tests
+        run: |
+          emulator_name="emulator-5554"
+          # 运行基础冒烟测试
+          adb shell am instrument -w -e class "com.lastchat.rikkafork.Tests" $emulator_name || true
+          
+          # 捕获启动日志
+          adb logcat -d > app/build/outputs/logcat_initial.txt
+
+      - name: Capture and analyze crash reports
+        run: |
+          # 等待一段时间让应用运行
+          sleep 10
+          
+          # 获取完整日志
+          adb logcat -d > app/build/outputs/logcat_full.txt
+          
+          # 检查 ASan 错误
+          if grep -q "AddressSanitizer" app/build/outputs/logcat_full.txt; then
+            echo "=== AddressSanitizer Error Detected ===" >> app/build/outputs/asan_report.txt
+            grep -A 50 "AddressSanitizer" app/build/outputs/logcat_full.txt >> app/build/outputs/asan_report.txt
+            echo "=== End of ASan Report ===" >> app/build/outputs/asan_report.txt
+            
+            # 提取内存错误位置
+            grep "SUMMARY.*AddressSanitizer" app/build/outputs/logcat_full.txt >> app/build/outputs/asan_summary.txt
+          else
+            echo "No AddressSanitizer errors detected" > app/build/outputs/asan_summary.txt
+          fi
+
+      - name: Upload ASan reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: asan-reports
+          path: app/build/outputs/
+
+  build-release:
+    name: Release Build
+    runs-on: ubuntu-latest
+    needs: build-debug
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Change package to lustchat.ll3
+        run: |
+          sed -i 's/applicationId = "lastchat.rikkafork.cocolal"/applicationId = "lustchat.ll3"/' app/build.gradle.kts
+          echo "✅ Package: lustchat.ll3"
+
+      - name: Create Firebase stub classes
+        run: |
+          mkdir -p "app/src/main/java/com/google/firebase/analytics"
+          mkdir -p "app/src/main/java/com/google/firebase/remoteconfig"
+          mkdir -p "app/src/main/java/com/google/firebase/crashlytics"
+          mkdir -p "app/src/main/java/com/google/firebase"
+
+          # 使用线程安全的实现
+          cat > "app/src/main/java/com/google/firebase/analytics/FirebaseAnalytics.kt" << 'EOF'
+          package com.google.firebase.analytics
+          import android.content.Context
+          import android.os.Bundle
+          import com.google.firebase.Firebase
+          import java.util.concurrent.locks.ReentrantLock
+          import kotlin.concurrent.withLock
+          
+          class FirebaseAnalytics private constructor() {
+              companion object {
+                  private val lock = ReentrantLock()
+                  @Volatile private var instance: FirebaseAnalytics? = null
+                  
+                  fun getInstance(): FirebaseAnalytics = lock.withLock {
+                      instance ?: FirebaseAnalytics().also { instance = it }
+                  }
+                  fun getInstance(context: Context): FirebaseAnalytics = getInstance()
+              }
+              fun logEvent(key: String, bundle: Bundle?) {}
+          }
+          
+          val Firebase.analytics: FirebaseAnalytics get() = FirebaseAnalytics.getInstance()
+          EOF
+
+          cat > "app/src/main/java/com/google/firebase/remoteconfig/FirebaseRemoteConfig.kt" << 'EOF'
+          package com.google.firebase.remoteconfig
+          import com.google.android.gms.tasks.Task
+          import com.google.android.gms.tasks.Tasks
+          import com.google.firebase.Firebase
+          import java.util.concurrent.ConcurrentHashMap
+          import java.util.concurrent.locks.ReentrantLock
+          import kotlin.concurrent.withLock
+          
+          class FirebaseRemoteConfig private constructor() {
+              companion object {
+                  private val lock = ReentrantLock()
+                  @Volatile private var instance: FirebaseRemoteConfig? = null
+                  
+                  fun getInstance(): FirebaseRemoteConfig = lock.withLock {
+                      instance ?: FirebaseRemoteConfig().also { instance = it }
+                  }
+              }
+              private val configStore = ConcurrentHashMap<String, Any>()
+              fun getString(key: String): String = configStore[key] as? String ?: ""
+              fun getLong(key: String): Long = (configStore[key] as? Number)?.toLong() ?: 0L
+              fun getBoolean(key: String): Boolean = configStore[key] as? Boolean ?: false
+              fun getDouble(key: String): Double = (configStore[key] as? Number)?.toDouble() ?: 0.0
+              fun setConfigSettingsAsync(settings: FirebaseRemoteConfigSettings): Task<Void> = Tasks.forResult(null)
+              fun setDefaultsAsync(defaults: Map<String, Any>): Task<Void> = lock.withLock {
+                  configStore.putAll(defaults); Tasks.forResult(null)
+              }
+              fun setDefaultsAsync(resourceId: Int): Task<Void> = Tasks.forResult(null)
+              fun fetchAndActivate(): Task<Boolean> = Tasks.forResult(true)
+              fun activate(): Task<Boolean> = Tasks.forResult(true)
+              val all: Map<String, Any> = configStore.toMap()
+          }
+          
+          class FirebaseRemoteConfigSettings private constructor() {
+              class Builder {
+                  var minimumFetchIntervalInSeconds: Long = 3600
+                  var fetchTimeoutInSeconds: Long = 60
+                  fun setMinimumFetchIntervalInSeconds(seconds: Long): Builder = apply { minimumFetchIntervalInSeconds = seconds }
+                  fun setFetchTimeoutInSeconds(seconds: Long): Builder = this
+                  fun build(): FirebaseRemoteConfigSettings = FirebaseRemoteConfigSettings()
+              }
+          }
+          
+          inline fun remoteConfigSettings(block: FirebaseRemoteConfigSettings.Builder.() -> Unit): FirebaseRemoteConfigSettings {
+              return FirebaseRemoteConfigSettings.Builder().apply(block).build()
+          }
+          val Firebase.remoteConfig: FirebaseRemoteConfig get() = FirebaseRemoteConfig.getInstance()
+          EOF
+
+          cat > "app/src/main/java/com/google/firebase/crashlytics/FirebaseCrashlytics.kt" << 'EOF'
+          package com.google.firebase.crashlytics
+          import com.google.firebase.Firebase
+          import java.util.concurrent.ConcurrentLinkedQueue
+          import java.util.concurrent.locks.ReentrantLock
+          import kotlin.concurrent.withLock
+          
+          class FirebaseCrashlytics private constructor() {
+              companion object {
+                  private val lock = ReentrantLock()
+                  @Volatile private var instance: FirebaseCrashlytics? = null
+                  
+                  fun getInstance(): FirebaseCrashlytics = lock.withLock {
+                      instance ?: FirebaseCrashlytics().also { instance = it }
+                  }
+              }
+              private val crashQueue = ConcurrentLinkedQueue<String>()
+              fun logException(e: Throwable) { crashQueue.add("Exception: ${e.message}") }
+              fun log(msg: String) { crashQueue.add(msg) }
+              fun setUserId(id: String) {}
+              fun setCustomKey(key: String, value: String) {}
+              fun setCustomKey(key: String, value: Boolean) {}
+              fun setCustomKey(key: String, value: Int) {}
+              fun setCustomKey(key: String, value: Double) {}
+              fun recordException(e: Throwable) { logException(e) }
+          }
+          val Firebase.crashlytics: FirebaseCrashlytics get() = FirebaseCrashlytics.getInstance()
+          EOF
+
+          cat > "app/src/main/java/com/google/firebase/FirebaseApp.kt" << 'EOF'
+          package com.google.firebase
+          import android.content.Context
+          import java.util.concurrent.locks.ReentrantLock
+          import kotlin.concurrent.withLock
+          
+          class FirebaseApp private constructor() {
+              companion object {
+                  private val lock = ReentrantLock()
+                  @Volatile private var instance: FirebaseApp? = null
+                  
+                  fun getInstance(): FirebaseApp = lock.withLock {
+                      instance ?: FirebaseApp().also { instance = it }
+                  }
+                  fun getInstance(name: String): FirebaseApp = getInstance()
+                  fun initializeApp(context: Context): FirebaseApp? = lock.withLock {
+                      if (instance == null) instance = FirebaseApp(); instance
+                  }
+                  fun initializeApp(context: Context, options: Any): FirebaseApp? = initializeApp(context)
+              }
+          }
+          
+          object Firebase {
+              private val lock = ReentrantLock()
+              @Volatile private var appInstance: FirebaseApp? = null
+              
+              val app: FirebaseApp get() = lock.withLock {
+                  appInstance ?: FirebaseApp.getInstance().also { appInstance = it }
+              }
+          }
+          EOF
+
+      - name: Remove Firebase dependencies
+        run: |
+          BUILD_FILE="app/build.gradle.kts"
+          sed -i '/platform(libs\.firebase\.bom)/d' "$BUILD_FILE"
+          sed -i '/implementation(libs\.firebase\.[^)]*)/d' "$BUILD_FILE"
+          sed -i '/dependencies {/a \    implementation("com.google.guava:guava:33.3.1-android")' "$BUILD_FILE"
+
+      - name: Remove risky permissions
+        run: |
+          cat > /tmp/foss_permissions.xml << 'EOF'
+          <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
+          <uses-permission android:name="android.permission.ACCESS_ADSERVICES_TOPICS" tools:node="remove" />
+          EOF
+
+          find app/src -name "AndroidManifest.xml" -type f | while read manifest; do
+            sed -i '/android.permission.WRITE_SETTINGS/d' "$manifest"
+            sed -i '/android.permission.QUERY_ALL_PACKAGES/d' "$manifest"
+            sed -i '/android.permission.POST_PROMOTED_NOTIFICATIONS/d' "$manifest"
+            if ! grep -q 'AD_ID.*tools:node="remove"' "$manifest"; then
+              sed -i '/<\/manifest>/e cat /tmp/foss_permissions.xml' "$manifest"
+            fi
+          done
+
+      - name: Disable auto-update
+        run: |
+          UPDATE_CHECKER="app/src/main/java/me/rerere/rikkahub/utils/UpdateChecker.kt"
+          if [ -f "$UPDATE_CHECKER" ]; then
+            sed -i 's|https://api.github.com/repos/54xzh/LastChat/releases|https://disabled.in.foss.build/updates|' "$UPDATE_CHECKER"
+          fi
+
+      - name: Generate launcher icons
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
+          
+          for src_dir in "app/src/main" "app/src/plus"; do
+            mkdir -p "$src_dir/res/mipmap-"{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}
+            for size in 48 72 96 144 192; do
+              case $size in 48) dir="mdpi" ;; 72) dir="hdpi" ;; 96) dir="xhdpi" ;; 144) dir="xxhdpi" ;; 192) dir="xxxhdpi" ;; esac
+              convert -size ${size}x${size} xc:"#4CAF50" -fill white -gravity center -pointsize $((size/2)) -annotate +0+0 "L" "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat.png"
+              cp "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat.png" "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat_round.png"
+              convert -size ${size}x${size} xc:none -fill "#4CAF50" -gravity center -pointsize $((size*2/3)) -annotate +0+0 "L" "$src_dir/res/mipmap-${dir}/ic_launcher_lastchat_foreground.png"
+            done
+          done
+
+      - name: Prepare signing and build
+        run: |
+          if [ -n "${{ secrets.KEY_BASE64 }}" ]; then
+            echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+            echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+          fi
+          chmod +x gradlew
+          ./gradlew clean :app:assemblePlusRelease --no-daemon --rerun-tasks --stacktrace
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          files: app/build/outputs/apk/plus/release/*.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

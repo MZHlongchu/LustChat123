@@ -159,13 +159,12 @@ jobs:
         run: |
           BUILD_FILE="app/build.gradle.kts"
           
-          # 在 android { defaultConfig { } } 中添加 Chaquopy 配置
-          # 1. 先找到 defaultConfig 块，在其内部添加 python 配置
+          # 在 defaultConfig { } 中添加 Chaquopy 配置
           if ! grep -q "extractPackages" "$BUILD_FILE"; then
-            # 使用 sed 在 defaultConfig { 后面插入 Chaquopy 配置
-            sed -i '/defaultConfig {/,/minSdkVersion/{ /minSdkVersion/a \
+            # 找到 defaultConfig { 后面的 applicationId 行，在其后插入 python 配置
+            sed -i '/defaultConfig {/,/versionName/{ /versionName/a \
             \
-                    // Chaquopy 稳定性配置: 减少内存压力，启用页面大小兼容\
+                    // Chaquopy 稳定性配置: 减少内存压力\
                     python {\
                         extractPackages "java"\
                         buildPython "python3.12"\
@@ -176,12 +175,7 @@ jobs:
             }' "$BUILD_FILE"
           fi
           
-          # 2. 启用 16KB page size 支持（Android 15+ 要求）
-          if ! grep -q "ndkVersion" "$BUILD_FILE"; then
-            sed -i '/android {/a \    ndkVersion "26.1.10909125"' "$BUILD_FILE"
-          fi
-          
-          echo "✅ Chaquopy configured for Android 16 stability"
+          echo "✅ Chaquopy configured for stability"
         continue-on-error: true
 
       ##### 以下保持完全不变 #####
@@ -242,3 +236,4 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
